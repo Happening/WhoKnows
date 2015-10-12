@@ -1,0 +1,4 @@
+name: Who Knows
+icon: questionmark
+description: Respond to questions with either the answer, or select someone who you think has given the correct answer.
+api: 2
