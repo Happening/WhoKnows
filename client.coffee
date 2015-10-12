@@ -6,7 +6,9 @@ Questionview = require 'questionview'
 Overview = require 'overview'
 
 exports.render = !->
-	if Page.state.get(0) is "question"
+	if s = Page.state.get(0)
+		if s is "scores"
+			return Overview.renderScores()
 		return Questionview.render()
 	else
 		return Overview.render()

@@ -1,1 +1,0 @@
-Db = require 'db'
