@@ -54,7 +54,32 @@ renderQuestion = (qid) !->
 	Dom.last().style
 		margin: "2px 4px"
 
+renderSpawn = !->
+	Ui.item !->
+		Dom.style
+			Box: 'left'
+			margin: '0px 0px'
+			padding: '10px 4px'
+			borderRadius: '2px'
+		Icon.render
+			data: 'add'
+			size: 30
+			style:
+				display: 'inline-block'
+				margin: '5px 17px 5px 5px'
+		Dom.div !->
+			Dom.style
+				Flex: true
+				Box: 'middle'
+				Dom.text tr("Request new question")
+		Dom.onTap !->
+			log "request new question"
+			Server.send 'newRound'
+
 exports.render = ->
+	maxId = Db.shared.get 'maxRounds'
+	unfinishedQuestion = !!Db.shared.get('rounds', maxId, 'new')
+
 	Dom.div !-> # top 3 contenders
 		Dom.style
 			textAlign: 'center'
@@ -87,17 +112,19 @@ exports.render = ->
 					Dom.style fontSize: '13px'
 					Dom.text tr("score: %1", scores[user])
 	Dom.section !-> # the questions overview
-		Dom.style
-			padding: '0px 4px'
+		Dom.style padding: '0px 4px'
+
+		renderSpawn() unless unfinishedQuestion
+
 		Db.shared.observeEach 'rounds', (question) !->
 			renderQuestion question.key()
 		, (question) ->
 			-question.key()
 
-	Ui.bigButton "Spawn question", !->
-		Server.send('newRound')
-	Ui.bigButton "Resolve question", !->
-		Server.send('resolve')
+	# Ui.bigButton "Spawn question", !->
+	# 	Server.send('newRound')
+	# Ui.bigButton "Resolve question", !->
+	# 	Server.send('resolve')
 
 exports.renderScores = !->
 	Page.setTitle tr("Scores")

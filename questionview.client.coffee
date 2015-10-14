@@ -169,7 +169,7 @@ renderQuestion = (withTimer) !->
 							height: '30px'
 							backgroundColor: "hsl(#{360/30*+Db.local.get('cd')},100%, 50%)"
 							_transform: "scaleX(#{Db.local.get('cd')*0.1})"
-							_transition: "transform 2s"
+							_transition: "transform 2s, background-color 1s linear"
 							WebkitTransition_: "transform 1s linear, background-color 1s linear"
 					Dom.div !->
 						Dom.style
