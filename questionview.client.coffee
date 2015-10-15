@@ -17,7 +17,8 @@ scoreColors = ['#ff6666', '#fff480', '#80ff80', '#4dff7c']
 questionID = 0
 roundId = 0
 question = []
-hideQuestionO = Obs.create(false)
+stateO = Obs.create('entering')
+cooldownO = Obs.create(null)
 answersSectionE = null
 
 toAnswer = (a) ->
@@ -58,34 +59,23 @@ renderAnswer = (i, isResult = false) !->
 			unless isResult
 				Dom.onTap !->
 					answer(index[i-1])
+startTimer = !->
+	Db.local.set 'start', Math.floor(0|(Date.now()*.001))
+	# already set the answer on the server to "user gave no answer"
+	Server.sync 'answer', roundId, -1, !->
+		Db.shared.merge 'rounds', roundId, 'answers', -1
+
+endTimer = !->
+	Db.local.remove 'start'
+
 answer = (a) !->
 	# -1 didn't provide a answer in time earlier
 	# 0 never answered the question yet
 	# 1..inf answer was userId
 	# A..E answer was one of the given options
 	Db.local.set 'answer', a
-
-count = !-> # ♫ Final countdown! ♬
-	setTimeout !->
-		c = Db.local.incr 'cd', -1
-		log "count", c
-		if c > 0
-			count()
-		else
-			log "DING"
-			answersSectionE.style # hide the answers
-				height:'0px'
-				padding: '0px 8px'
-			setTimeout !-> # clear stuff and send to server
-				log "Sending"
-				Db.local.remove 'cd'
-				Db.local.set 'timePassed', true
-				answer(-1) unless Db.local.peek('answer') # too late
-				# send to server
-				Server.sync 'answer', roundId, Db.local.peek('answer'), !->
-					Db.shared.merge 'rounds', roundId, 'answers', Plugin.userId(), Db.local.peek('answer')
-			, 1000
-	, 1000
+	Server.sync 'answer', roundId, a, !->
+		Db.shared.merge 'rounds', roundId, 'answers', Plugin.userId(), a
 
 renderWarning = !->
 	Modal.show tr("Question time")
@@ -94,11 +84,9 @@ renderWarning = !->
 			if value is 'back'
 				Page.back()
 			else # Engage answering mode
-				hideQuestionO.set false
 				Db.local.set 'timePassed', false
 				Db.local.remove 'answer'
-				Db.local.set 'cd', 10
-				count()
+				startTimer()
 			Modal.remove()
 		, ['back', tr("Back"), 'ok', tr("OK!")]
 	Obs.onClean !->
@@ -106,41 +94,74 @@ renderWarning = !->
 
 exports.render = -> # a bit like a state machine
 # (only without actual states but with various booleans... could have used an actual state machine. Observables are lovely for that)
-	roundId = Page.state.get(0)
-	question = Util.getQuestion(roundId)
-	oldAnswer = Util.myAnswer(roundId)
-	resolved = !Db.shared.get 'rounds', roundId, 'new'
 	Page.setTitle tr("Question")
+	roundId = Page.state.get(0)
+	question = Util.getQuestion(roundId) # question array
+	oldAnswer = Util.myAnswer(roundId) # my given answer
 
-	if not resolved
-		if oldAnswer isnt 0 # already answered
-			Db.local.set 'timePassed', true
-			Db.local.set 'answer', oldAnswer
-		else # about to answer. confirm
-			if !Db.local.peek('cd')? # warning state (about to answer)
-				hideQuestionO.set true
-				Db.local.remove 'timePassed'
-				renderWarning()
-
+	# determine state
 	Obs.observe !->
-		tp = Db.local.get 'timePassed' # trigger observe
-		hq = hideQuestionO.get() # trigger observe
-		if resolved # resolved state
-			renderQuestion()
-			renderResolved()
-		else
-			if tp # done answering, before resolve state
+		if stateO.peek() isnt 'animateStop' # don't change state when in animation
+			resolved = !Db.shared.get 'rounds', roundId, 'new'
+			answered = Db.shared.peek 'rounds', roundId, 'answers', Plugin.userId()
+			started = Db.local.get 'start'
+
+			if resolved
+				stateO.set 'resolved'
+			else
+				if answered and not started
+					Db.local.set 'answer', answered
+					stateO.set 'answered'
+				else
+					if started
+						stateO.set 'answering'
+					else
+						stateO.set 'entering'
+
+		log "State:", stateO.peek()
+
+	# state machine (But not using function pointers)
+	Obs.observe !->
+		state = stateO.get()
+		switch state
+			when 'animateStop'
+				renderQuestion()
+				renderAnswers()
+				answersSectionE.style # hide the answers
+					height:'0px'
+					padding: '0px 8px'
+				setTimeout !->
+					stateO.set 'answered'
+				, 1000
+			when 'resolved'
+				renderQuestion()
+				renderResolved()
+			when 'answered'
 				renderQuestion()
 				renderResult()
-			else # answering state
-				unless hq
-					renderQuestion(true)
-					renderAnswers()
-				# else: waring state
+			when 'answering'
+				# count()
+				Obs.observe count
+				renderQuestion(true)
+				renderAnswers()
+			when 'entering'
+				renderWarning()
+
+count = !-> # ♫ Final countdown! ♬
+	c = Db.local.peek('start') + 10 # ten seconds
+	c = Math.floor(c - (0|(Date.now()*.001)))
+	cooldownO.set c
+	if c > 0
+		log "count", c
+		Obs.delay 1000, count
+	else
+		log "DING"
+		stateO.set 'animateStop'
+		endTimer()
 
 renderQuestion = (withTimer) !->
 	Dom.div !-> # question
-		unless hideQuestionO.get()
+		unless stateO.get() is 'entering'
 			Dom.style
 				textAlign: 'center'
 				boxShadow: "0 2px 0 rgba(0,0,0,.1)"
@@ -151,8 +172,7 @@ renderQuestion = (withTimer) !->
 						Dom.style
 							position: 'relative'
 							height: '30px'
-							# backgroundColor: countDownBackColors[Db.local.get('cd')-1]
-							backgroundColor: "hsl(#{360/30*+Db.local.get('cd')},100%, #{87 - Math.pow(10-Db.local.get('cd'),1.5)}%)"
+							backgroundColor: "hsl(#{360/30*+cooldownO.get()},100%, #{87 - Math.pow(10-cooldownO.get(),1.5)}%)"
 							margin: "0px -8px"
 							textAlign: 'center'
 							color: 'black'
@@ -161,20 +181,21 @@ renderQuestion = (withTimer) !->
 							fontSize: '20px'
 							_transition: "background-color 1s linear"
 					Dom.div !->
-						Dom.style
-							position: 'absolute'
-							top: '0px'
-							left: '0px'
-							width: '100%'
-							height: '30px'
-							backgroundColor: "hsl(#{360/30*+Db.local.get('cd')},100%, 50%)"
-							_transform: "scaleX(#{Db.local.get('cd')*0.1})"
-							_transition: "transform 2s, background-color 1s linear"
-							WebkitTransition_: "transform 1s linear, background-color 1s linear"
+						Obs.observe !->
+							Dom.style
+								position: 'absolute'
+								top: '0px'
+								left: '0px'
+								width: '100%'
+								height: '30px'
+								backgroundColor: "hsl(#{360/30*+cooldownO.get()},100%, 50%)"
+								_transform: "scaleX(#{cooldownO.get()*0.1})"
+								_transition: "transform 2s, background-color 1s linear"
+								WebkitTransition_: "transform 1s linear, background-color 1s linear"
 					Dom.div !->
 						Dom.style
 							_transform: 'translate3D(0,0,0)'
-						Dom.text Db.local.get('cd')||0
+						Dom.text cooldownO.get()||0
 
 renderAnswers = !->
 	Dom.div !->

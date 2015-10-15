@@ -46,7 +46,7 @@ exports.questions = questions = -> [
 	["How annoying is Rap music to listen to while working?", "very", "Nah, it ain't that bad", "Jo jo jo!", 3]
 	["Why are iPhones so expensive?", "Because Apple can", "BOM + R&D + design + software + 30% margin = 700€", "S6 Edge costs more", "People are idiots", 1]
 	["Deal or no Deal?", "Deal", "No Deal", "No wait!", "You don\'t want to be stuck with just one dollar!", 3]
-	["Who is the best Star Trek captain", "Kirk", "Picard", "Janeway", "Archer", "Pike", "Spock", 2]
+	["Who is the best Star Trek captain?", "Kirk", "Picard", "Janeway", "Archer", "Pike", "Spock", 2]
 	["Does this question work?", "yes", "no", "average", "ding!", 1]
 	# WARNING: always add new questions to the end of this array
 ]

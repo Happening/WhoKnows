@@ -114,7 +114,7 @@ exports.render = ->
 	Dom.section !-> # the questions overview
 		Dom.style padding: '0px 4px'
 
-		renderSpawn() unless unfinishedQuestion
+		renderSpawn() unless unfinishedQuestion or !!Db.shared.get('ooq') # ooq = out of questions
 
 		Db.shared.observeEach 'rounds', (question) !->
 			renderQuestion question.key()

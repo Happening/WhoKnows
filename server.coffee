@@ -7,12 +7,19 @@ Util = require 'util'
 
 questions = Util.questions()
 
+exports.onInstall = !->
+	Db.shared.set 'maxRounds', 0
+
+# exports.onUpgrade = !->
+# 	if !Db.shared.get('rounds')
+# 		newRound()
+
 exports.client_answer = (id, a) !->
 	Db.shared.merge 'rounds', id, 'answers', Plugin.userId(), a
 
 exports.client_timer = setTimers = !->
 	log "setTimers called"
-	time = time = 0|(Date.now()*.001)
+	time = 0|(Date.now()*.001)
 	roundDuration = Util.getRoundDuration(time)
 
 	Timer.cancel()
@@ -50,6 +57,11 @@ exports.client_newRound = exports.newRound = newRound = !->
 
 		Event.create
 			text: tr("New question!")
+
+		if available.length is 1 # this was the last question
+			Db.shared.set 'ooq', true # Out Of Question
+		else
+			Db.shared.remove 'ooq'
 
 	else
 		log "ran out of questions"
