@@ -30,7 +30,7 @@ renderAnswer = (i, isResult = false) !->
 		unless isResult
 			selected = Db.local.get('answer') is index[i-1]
 		Dom.style
-			backgroundColor: "hsl(#{360/5*i},100%,#{if selected then 77 else 87}%)"
+			backgroundColor: "hsl(#{360/5*i},100%,#{if selected then 71 else 87}%)"
 			position: 'relative'
 			borderRadius: '2px'
 			margin: "8px 0px 0px" unless isResult
