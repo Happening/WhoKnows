@@ -74,6 +74,8 @@ answer = (a) !->
 	# 1..inf answer was userId
 	# A..E answer was one of the given options
 	Db.local.set 'answer', a
+	stateO.set 'animateStop'
+	endTimer()
 	Server.sync 'answer', roundId, a, !->
 		Db.shared.merge 'rounds', roundId, 'answers', Plugin.userId(), a
 
@@ -255,24 +257,25 @@ renderAnswers = !->
 		answersSectionE = Dom.get()
 
 renderResult = !->
-	Dom.div !-> # sorry
-		Dom.style
-			textAlign: 'center'
-			padding: '20px'
-		Dom.h4 !->
-			Dom.text tr("Sorry, the time is up.")
-
-	Dom.section !-> # given answer
-		a = Db.local.peek('answer')
-		ans = toAnswer(a)
-		log a, ans
-		if a <= 0
+	a = Db.local.peek('answer')
+	ans = toAnswer(a)
+	log a, ans
+	if a <= 0 || !a?
+		Dom.div !-> # sorry
+			Dom.style
+				textAlign: 'center'
+				padding: '20px'
+			Dom.h4 !->
+				Dom.text tr("Sorry, the time is up.")
+		Dom.section !-> # given answer
 			Dom.h4 tr("You have given no answer.")
-		else if ans > 0
+	else if ans > 0
+		Dom.section !-> # given answer
 			Dom.h4 tr("Your given answer was:")
 			renderAnswer ans, true
-		else if a > 0
-			Dom.h4 tr("You've hope the following person to know answer:")
+	else if a > 0
+		Dom.section !-> # given answer
+			Dom.h4 tr("You hope the following person knows the answer:")
 			Dom.style textAlign: 'center'
 			Ui.avatar Plugin.userAvatar(a),
 				size: 100

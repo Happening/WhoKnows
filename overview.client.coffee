@@ -42,7 +42,7 @@ renderQuestion = (qid) !->
 				Box: 'middle'
 				color: '#5b0' if unread
 			if unResolved
-				if answered is 0
+				if answered is 0 or Db.local.get('start')?
 					Dom.text tr("New question")
 				else
 					Dom.text tr("Question answered. Waiting for results")

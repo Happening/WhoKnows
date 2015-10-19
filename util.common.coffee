@@ -42,7 +42,7 @@ exports.questions = questions = -> [
 	# [0]: question, [1-x]: up to five answers, [x]: index of correct answer (1 is first answer)
 	["How high is the Eiffel Tower (Without antenna)", "200m", "250m", "300m", "350m", 3]
 	["How high is the Statue of Liberty", "58m", "74m", "88m", "93m", 4]
-	["How high is the Empire State Building (to the tip)", "443m", "456m", "466m", "495m", 1]
+	["How high is the Empire State Building (to the tip)", "443m", "493m", "543m", "593m", 1]
 	["What African country is the Central Kalahari Game Reserve located in?", "Botswana", "Nigeria", "South Africa", "Kenya", 1]
 	["What is the function served by the Paris building known as the Sorbonne?", "hospital", "school", "museum", "theater", 2]
 	["Which one of the following countries is not known as one of the Baltic states?", "Albania ", "Estonia", "Latvia", "Lithuania", 1]
