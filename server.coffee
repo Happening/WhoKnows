@@ -26,7 +26,15 @@ exports.client_answer = (id, a) !->
 	if answers is Plugin.userIds().length
 		log "All users answered the question"
 		Timer.cancel()
-		Timer.set 45*1000, 'resolve' # resolve after 15 sec
+		Timer.set 60*1000, 'resolve' # resolve after 15 sec
+
+exports.client_vote = (id, v) !->
+	votes = Db.shared.get('rounds', id, 'votes', Plugin.userId())||[]
+	if v in votes
+		votes.splice votes.indexOf(v), 1
+	else
+		votes.push v
+	Db.shared.merge 'rounds', id, 'votes', Plugin.userId(), votes
 
 exports.client_timer = setTimers = !->
 	log "setTimers called"
@@ -54,14 +62,15 @@ exports.client_newRound = exports.newRound = newRound = !->
 			available.push +nr
 
 	log "available", available.length
-	if available.length
+	if available.length or true
 		maxRounds = Db.shared.incr 'maxRounds', 1
 		newQuestion = available[Math.floor(Math.random()*available.length)]
 		time = time = 0|(Date.now()*.001)
 		Db.shared.set 'rounds', maxRounds,
-			'qid': newQuestion
+			'qid': 1#newQuestion
 			'new': true
 			'time': time
+			'options': [1,2,3,4] # provide this in the 'correct' order. The client will rearrange them at random.
 		log "made new question:", newQuestion, "(available", available.length, ")"
 
 		setTimers()
@@ -77,9 +86,6 @@ exports.client_newRound = exports.newRound = newRound = !->
 	else
 		log "ran out of questions"
 
-toAnswer = (a) ->
-	["", "A", "B", "C", "D", "E", "F"].indexOf(a)
-
 exports.client_resolve = exports.resolve = resolve = (roundId) !->
 	if !roundId?
 		roundId = +Db.shared.get('maxRounds')
@@ -90,9 +96,8 @@ exports.client_resolve = exports.resolve = resolve = (roundId) !->
 		return
 	if !question.get('new')?
 		log "Question already resolved"
-		return
+		# return
 	answers = question.get('answers')||[]
-	theAnswer = Util.getAnswer(roundId)
 
 	getVotes = (uId) !->
 		votes = 0
@@ -101,24 +106,22 @@ exports.client_resolve = exports.resolve = resolve = (roundId) !->
 		return votes
 
 	for user in Plugin.userIds()
-		v = answers[user]||-1 # v for value
-		score = 0
-		if v isnt -1
-			ans = toAnswer(v) # has user given an actual answer?
-			if ans < 0
-				# lookup recursively if my chosen user had the correct answer
-				target = answers[v]
-				targets = [v]
-				while toAnswer(target) <= 0
-					target = answers[target]
-					if target in targets
-						break
-					targets.push target
-				ans = toAnswer(target)
-			log Plugin.userName(user), " ans: ", ans
-			if ans is theAnswer
-				score+=3
-		score += getVotes(user)
+		value = answers[user]||[]
+		solution = Util.getSolution(roundId) # seed
+		# calc score
+		hits = 0
+		for i in [0..3]
+			t = value.slice(0) # clone, not point
+			t.splice(t.indexOf(i),1)
+			tt = solution.slice(0) # clone, not point
+			tt.splice(tt.indexOf(i),1)
+			log 'testing', t, tt
+			for j in [0..2]
+				if t[j] is tt[j] then hits++
+
+		score = Math.round(hits*10/12)
+		log "user answer:", value, "solution:", solution, "hits:", hits, "score:", score
+
 		# safe scores
 		if score then question.set 'scores', user, score # score for this round. Not needed when it's zero
 		Db.shared.incr 'scores', user, score # global
