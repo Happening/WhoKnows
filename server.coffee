@@ -15,7 +15,18 @@ exports.onInstall = !->
 # 		newRound()
 
 exports.client_answer = (id, a) !->
+	log "", Plugin.userId(), "answered:", a
 	Db.shared.merge 'rounds', id, 'answers', Plugin.userId(), a
+
+	# Count number of people who answered. If it is everyone, we can resolve the question. (Handy for local party mode)
+	# No, there is no count() function for databased in the backend.
+	answers = 0
+	Db.shared.iterate 'rounds', id, 'answers', (a) !->
+		answers++
+	if answers is Plugin.userIds().length
+		log "All users answered the question"
+		Timer.cancel()
+		Timer.set 45*1000, 'resolve' # resolve after 15 sec
 
 exports.client_timer = setTimers = !->
 	log "setTimers called"

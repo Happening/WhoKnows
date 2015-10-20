@@ -100,6 +100,7 @@ exports.render = ->
 					style:
 						position: 'inline-block'
 						margin: '0px 0px 5px'
+						display: 'inline-block'
 				Dom.div !->
 					Dom.style
 						fontWeight: 'bold'
@@ -121,10 +122,11 @@ exports.render = ->
 		, (question) ->
 			-question.key()
 
-	# Ui.bigButton "Spawn question", !->
-	# 	Server.send('newRound')
-	# Ui.bigButton "Resolve question", !->
-	# 	Server.send('resolve')
+	if Util.debug()
+		Ui.bigButton "Spawn question", !->
+			Server.send('newRound')
+		Ui.bigButton "Resolve question", !->
+			Server.send('resolve')
 
 exports.renderScores = !->
 	Page.setTitle tr("Scores")

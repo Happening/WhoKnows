@@ -24,7 +24,7 @@ answersSectionE = null
 toAnswer = (a) ->
 	["", "A", "B", "C", "D", "E", "F"].indexOf(a)
 
-renderAnswer = (i, isResult = false) !->
+renderAnswer = (i, isResult = false, empty = false) !->
 	Dom.div !->
 		selected = false
 		unless isResult
@@ -55,8 +55,8 @@ renderAnswer = (i, isResult = false) !->
 					padding: "4px 8px"
 					_boxSizing: 'border-box'
 					minHeight: '30px'
-				Dom.userText question[i]
-			unless isResult
+				Dom.userText question[i] unless empty
+			unless isResult or empty
 				Dom.onTap !->
 					answer(index[i-1])
 startTimer = !->
@@ -79,21 +79,6 @@ answer = (a) !->
 	Server.sync 'answer', roundId, a, !->
 		Db.shared.merge 'rounds', roundId, 'answers', Plugin.userId(), a
 
-renderWarning = !->
-	Modal.show tr("Question time")
-		, tr("You are about to answer a question. You only have 10 seconds to choose an answer!")
-		, (value) !->
-			if value is 'back'
-				Page.back()
-			else # Engage answering mode
-				Db.local.set 'timePassed', false
-				Db.local.remove 'answer'
-				startTimer()
-			Modal.remove()
-		, ['back', tr("Back"), 'ok', tr("OK!")]
-	Obs.onClean !->
-		Modal.remove()
-
 exports.render = -> # a bit like a state machine
 # (only without actual states but with various booleans... could have used an actual state machine. Observables are lovely for that)
 	Page.setTitle tr("Question")
@@ -103,7 +88,7 @@ exports.render = -> # a bit like a state machine
 
 	# determine state
 	Obs.observe !->
-		if stateO.peek() isnt 'animateStop' # don't change state when in animation
+		if stateO.get() isnt 'animateStop' # don't change state when in animation
 			resolved = !Db.shared.get 'rounds', roundId, 'new'
 			answered = Db.shared.peek 'rounds', roundId, 'answers', Plugin.userId()
 			started = Db.local.get 'start'
@@ -118,6 +103,9 @@ exports.render = -> # a bit like a state machine
 					if started
 						stateO.set 'answering'
 					else
+						# reset stuff
+						Db.local.set 'timePassed', false
+						Db.local.remove 'answer'
 						stateO.set 'entering'
 
 		log "State:", stateO.peek()
@@ -129,9 +117,10 @@ exports.render = -> # a bit like a state machine
 			when 'animateStop'
 				renderQuestion()
 				renderAnswers()
-				answersSectionE.style # hide the answers
-					height:'0px'
-					padding: '0px 8px'
+				setTimeout !-> # after drawcall trick
+					answersSectionE.style # hide the answers
+						maxHeight:'0px'
+				, 0
 				setTimeout !->
 					stateO.set 'answered'
 				, 1000
@@ -147,7 +136,8 @@ exports.render = -> # a bit like a state machine
 				renderQuestion(true)
 				renderAnswers()
 			when 'entering'
-				renderWarning()
+				renderQuestion(true, true)
+				renderAnswers(true)
 
 count = !-> # ♫ Final countdown! ♬
 	c = Db.local.peek('start') + 10 # ten seconds
@@ -161,65 +151,69 @@ count = !-> # ♫ Final countdown! ♬
 		stateO.set 'animateStop'
 		endTimer()
 
-renderQuestion = (withTimer) !->
+renderQuestion = (withTimer = false, fake = false) !->
 	Dom.div !-> # question
-		unless stateO.get() is 'entering'
-			Dom.style
-				textAlign: 'center'
-				boxShadow: "0 2px 0 rgba(0,0,0,.1)"
+		Dom.style
+			textAlign: 'center'
+			boxShadow: "0 2px 0 rgba(0,0,0,.1)"
+		if fake
+			Dom.h4 tr("Ready to answer the question?")
+			Ui.bigButton "Yes, go!", !->
+				startTimer()
+		else
 			Dom.h4 question[0]
-			if withTimer
-				Dom.div !-> # timer
+		if Util.debug()
+			Ui.bigButton "Resolve", !->
+				Server.send 'resolve', roundId
+		if withTimer
+			Dom.div !-> # timer
+				Obs.observe !->
+					Dom.style
+						position: 'relative'
+						height: '30px'
+						backgroundColor: "hsl(#{360/30*+(cooldownO.get()||10)},100%, #{87 - Math.pow(10-(cooldownO.get()||10),1.5)}%)"
+						margin: "0px -8px"
+						textAlign: 'center'
+						color: 'black'
+						boxSizing: 'border-box'
+						padding: '2px'
+						fontSize: '20px'
+						_transition: "background-color 1s linear"
+				Dom.div !->
 					Obs.observe !->
 						Dom.style
-							position: 'relative'
+							position: 'absolute'
+							top: '0px'
+							left: '0px'
+							width: '100%'
 							height: '30px'
-							backgroundColor: "hsl(#{360/30*+cooldownO.get()},100%, #{87 - Math.pow(10-cooldownO.get(),1.5)}%)"
-							margin: "0px -8px"
-							textAlign: 'center'
-							color: 'black'
-							boxSizing: 'border-box'
-							padding: '2px'
-							fontSize: '20px'
-							_transition: "background-color 1s linear"
-					Dom.div !->
-						Obs.observe !->
-							Dom.style
-								position: 'absolute'
-								top: '0px'
-								left: '0px'
-								width: '100%'
-								height: '30px'
-								backgroundColor: "hsl(#{360/30*+cooldownO.get()},100%, 50%)"
-								_transform: "scaleX(#{cooldownO.get()*0.1})"
-								_transition: "transform 2s, background-color 1s linear"
-								WebkitTransition_: "transform 1s linear, background-color 1s linear"
-					Dom.div !->
-						Dom.style
-							_transform: 'translate3D(0,0,0)'
-						Dom.text cooldownO.get()||0
+							backgroundColor: "hsl(#{360/30*+(cooldownO.get()||10)},100%, 50%)"
+							_transform: "scaleX(#{(cooldownO.get()||10)*0.1})"
+							_transition: "transform 2s, background-color 1s linear"
+							WebkitTransition_: "transform 1s linear, background-color 1s linear"
+				Dom.div !->
+					Dom.style
+						_transform: 'translate3D(0,0,0)'
+					Dom.text cooldownO.get()||10
 
-renderAnswers = !->
+renderAnswers = (hideAnswers = false) !->
 	Dom.div !->
 		Dom.overflow()
 		Dom.style
 			margin: "0px -8px -8px"
-			height: Page.height()-170 +'px'
-			_transition: "height 1s ease, padding 1s ease"
+			maxHeight: Page.height()-170 +'px'
+			_transition: "max-height 1s ease"
 		Dom.section !-> # answers
 			Dom.style
 				overflow: 'hidden'
 				padding: '8px'
 				boxSizing: 'border-box'
-				maxHeight: '500px'
-				_transition: "max-height 1s ease, padding 1s ease"
 			Dom.div !-> # question
 				Dom.style textAlign: 'center'
 				Dom.h4 !->
 					Dom.style margin: '0px'
 					Dom.text tr("I know!")
-			renderAnswer(i) for i in [1..question.length-2]
-			answersSectionE = Dom.get()
+			renderAnswer(i, false, hideAnswers) for i in [1..question.length-2]
 
 		Dom.section !-> # other users
 			Dom.style
@@ -251,8 +245,9 @@ renderAnswers = !->
 					Dom.div !->
 						Dom.style fontSize: '18px'
 						Dom.text Form.smileyToEmoji user.get('name')
-					Dom.onTap !->
-						answer user.key()
+					unless hideAnswers
+						Dom.onTap !->
+							answer user.key()
 			, (user) -> user.get('name')
 		answersSectionE = Dom.get()
 
