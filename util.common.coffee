@@ -64,7 +64,7 @@ exports.questions = questions = -> [
 	# WARNING: indices are used, so don't remove items from this array (and add new questions at the end)
 	# [0]: question, [1-x]: the answers in the correct order
 	["Sort Star Wars movies by release date", "A New Hope", "The Empire Strikes Back", "Return of the Jedi", "The Phantom Menace", "Attack of the Clones", "Revenge of the Sith", "The Force Awakens"]
-	["Sort Muse albums by release date", "Showbiz", "Origin of Symmetry", "Absolution", "Black Holes and Revelations", "The Resistance", "2nd Law", "Drones"]
+	["Sort Muse albums by release date", "Showbiz Showbiz Showbiz Showbiz Showbiz Showbiz Showbiz Showbiz", "Origin of Symmetry", "Absolution", "Black Holes and Revelations", "The Resistance", "2nd Law", "Drones"]
 	# WARNING: always add new questions to the end of this array
 ]
 

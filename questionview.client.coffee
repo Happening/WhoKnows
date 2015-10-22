@@ -15,13 +15,14 @@ Icon = require 'icon'
 # red, yellow x 4, light green, dark green
 scoreColors = ['#ff6666', '#ff9e66', '#ffcf66', '#ffe866', '#fff566', '#80ff80', '#4dff7c']
 
-timeOut = (if Util.debug() then 60 else 20) # you have 20 seconds to answer the question
+timeOut = (if Util.debug() then 600 else 20) # you have 20 seconds to answer the question
 questionID = 0
 roundId = 0
 order = []
 question = []
 questionOptions = []
 solution = []
+items = []
 stateO = Obs.create('entering')
 cooldownO = Obs.create(null)
 
@@ -78,6 +79,148 @@ renderAnswer = (i, isResult = false, empty = false) !->
 						fontWeight: 'bold'
 						backgroundColor: "rgba(255,255,255,0.4)"
 					Dom.text (selected+1)
+
+renderDraggableAnswer = (index, containerE) ->
+	offsetO = Obs.create 0
+	Dom.div !->
+		Dom.style
+			backgroundColor: "hsl(#{360/5*index},100%,87%)"
+			position: 'relative'
+			borderRadius: '2px'
+			margin: "8px 0px 0px"# unless isResult
+			_transform: "translateY(#{offsetO.get()}px)"
+		Dom.div !->
+			Dom.style
+				Box: 'left'
+				margin: '0px'
+			Dom.div !->
+				Dom.style
+					_boxSizing: 'border-box'
+					width: '28px'
+					Box: 'middle center'
+					fontWeight: 'bold'
+					backgroundColor: "rgba(0,0,0,0.1)"
+				Dom.text ["A", "B", "C", "D"][index]
+			Dom.div !->
+				Dom.style
+					Flex: true
+					Box: 'middle'
+					padding: "4px 8px"
+					_boxSizing: 'border-box'
+					minHeight: '30px'
+				Dom.userText questionOptions[index]
+			Dom.div !->
+				Dom.style
+					Box: 'middle center'
+				Icon.render
+					data: 'reorder'
+					color: '#bbb'
+					size: 20
+					style:
+						margin: "2px 4px"
+
+		setOffset = (offset) !->
+			offsetO.set offset
+		getOffset = ->
+			offsetO.peek()
+
+
+		# Draggable
+		element = Dom.get()
+		upperLimit = 0
+		lowerLimit = 0
+		oldY = 0
+		curOrder = 0
+		oldDraggedY = 0
+		Dom.trackTouch (touch) ->
+			return unless touch?
+			draggedY = touch.y
+			# limit draggedY to containing div
+			draggedY = Math.max(lowerLimit, Math.min(upperLimit, draggedY))
+			yPos = element.getOffsetXY().y - containerE.getOffsetXY().y
+
+			# Touch start
+			if touch.op&1
+				# dragPosition = item.order # Start position
+				upperLimit = containerE.height() - yPos - element.height()/2
+				lowerLimit = -yPos
+				oldY = yPos + element.height()/2
+				curOrder = index
+				oldDraggedY = draggedY
+				log "limit:", upperLimit, "(", containerE.height(), element.getOffsetXY().y,")"
+				element.style
+					backgroundColor: "hsl(#{360/5*index},100%,67%)"
+					zIndex: "99"
+
+			# Touch move
+			element.style _transform: "translateY(#{draggedY}px)"
+			direction = draggedElementY > oldY
+
+			# higher sample rate
+			draggedElementY = 0
+			draggedDelta = draggedY-oldDraggedY
+			while Math.abs(draggedDelta) > 5
+				draggedDelta += if draggedDelta > 0 then -5 else 5
+				draggedElementY = yPos + draggedY + (element.height()/2) - draggedDelta
+				onDrag(draggedElementY)
+
+			draggedElementY = yPos + draggedY + (element.height()/2)
+			onDrag(draggedElementY)
+
+			oldDraggedY = draggedY
+
+			# Touch end
+			if touch.op&4 # touch is stopped
+				element.style backgroundColor: "hsl(#{360/5*index},100%,87%)"
+				element.style
+					_transform: "translateY(0)"
+					zIndex: ''
+				# set order, ready for redraw
+
+			oldY = draggedElementY
+
+		onDrag = (draggedElementY) !->
+			for item, i in items
+				if i is index
+					continue
+					# above myself. no order change?
+				trans = item.getOffset()
+				if draggedElementY > item.yTop+trans and draggedElementY < item.yBot+trans
+
+					# if over top or bottom half?
+					if draggedElementY < item.yHalf+trans # top half
+						item.e.style border: '1px solid blue'
+						log curOrder, item.order
+						if curOrder > item.order
+							t = if trans < 0 then 0 else element.height()+8
+							item.setOffset t
+							curOrder = item.order
+							item.order++
+					else # bottom half
+						item.e.style border: '1px solid red'
+						if curOrder < item.order
+							curOrder = item.order
+							item.order--
+							t = if trans > 0 then 0 else -(element.height()+8)
+							item.setOffset t
+				else
+					item.e.style border: ''
+
+		# return stuff we want in the items array
+		setTimeout !-> # after draw call
+			r =
+				height: element.height()
+				halfHeight: element.height()/2
+				yTop: (element.getOffsetXY().y - containerE.getOffsetXY().y)
+				yHalf: (element.getOffsetXY().y - containerE.getOffsetXY().y) + element.height()/2
+				yBot: (element.getOffsetXY().y - containerE.getOffsetXY().y) + element.height()
+				order: index
+				e: element
+				setOffset: setOffset
+				getOffset: getOffset
+			items.push r
+		, 0
+
 
 renderShortAnswer = (i) !->
 	Dom.div !->
@@ -198,7 +341,15 @@ answering = !->
 		Dom.style padding: "0px 8px 8px"
 		Dom.h4 !->
 			Dom.text tr("Answers:")
-		renderAnswers()
+		# renderAnswers()
+		items = []
+		Dom.div !->
+			order = Db.shared.get('rounds', roundId, 'answers', Plugin.userId())||[0,1,2,3]
+			Dom.text order
+			renderDraggableAnswer(i, Dom.get()) for i in order
+			# renderAnswer(1)
+			# renderAnswer(2)
+			# renderAnswer(3)
 
 	Ui.bigButton tr("Done"), !->
 		endTimer()
@@ -340,7 +491,6 @@ count = !-> # ♫ Final countdown! ♬
 	c = Math.floor(c - (0|(Date.now()*.001)))
 	cooldownO.set c
 	if c > 0
-		log "count", c
 		Obs.delay 1000, count
 	else
 		log "DING"
