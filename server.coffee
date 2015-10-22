@@ -101,7 +101,7 @@ exports.client_resolve = exports.resolve = resolve = (roundId) !->
 		return votes
 
 	for user in Plugin.userIds()
-		input = answers[user]||[]
+		input = (answers[user]||[]).slice(0)
 		continue unless input.length
 		target = Util.getSolution(roundId)
 		# calc score using the V⁴ Method (van Viegen, van Vliet)
@@ -112,13 +112,30 @@ exports.client_resolve = exports.resolve = resolve = (roundId) !->
 			input.splice(0,1)
 			target.splice(index,1)
 		score = 6-errors
-		log "user answer:", input, "solution:", target, "errors:", errors, "score:", score
+		log "user #{user} answer:", answers[user], "solution:", Util.getSolution(roundId), "errors:", errors, "score:", score
+
+		# for each other user
+		for user2 in Plugin.userIds()
+			log "votes:", user2, question.get('votes', user2, user )
+			if question.get('votes', user2, user) is true
+				question.set 'votes', user2, user, (if score>4 then 1 else -1)
 
 		# safe scores
 		if score then question.set 'scores', user, score # score for this round. Not needed when it's zero
-		Db.shared.incr 'scores', user, score # global
 
 		question.set 'new', null # flag question as resolved
+
+	for user in Plugin.userIds()
+		score = 0
+		votes = question.get 'votes', user
+		for k,v of votes
+			score+=v
+			log "incr", user, k, v
+		if score then question.set 'results', user, score
+		# safe to db
+		Db.shared.incr 'scores', user, score # global
+
+	# add to score, the result of their who knows comp.
 
 	Event.create
 		unit: 'round'
