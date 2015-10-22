@@ -25,10 +25,13 @@ exports.getOptions = (roundId) ->
 	k = getKey(roundId)
 	return [q[k[0]+1], q[k[1]+1], q[k[2]+1], q[k[3]+1]]
 
-# the solution is key, applied on key
+# the solution is index of options in key
 exports.getSolution = (roundId) ->
 	k = getKey(roundId)
-	return [k[k[0]], k[k[1]], k[k[2]], k[k[3]]]
+	r = []
+	for i in [0..3]
+		r[i] = k.indexOf(i)
+	return r
 
 # the key is a random order of [1..3]
 exports.getKey = getKey = (roundId) ->

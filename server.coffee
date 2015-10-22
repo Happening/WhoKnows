@@ -26,14 +26,9 @@ exports.client_answer = (id, a) !->
 	if answers is Plugin.userIds().length
 		log "All users answered the question"
 		Timer.cancel()
-		Timer.set 60*1000, 'resolve' # resolve after 15 sec
+		Timer.set 120*1000, 'resolve' # resolve after 2 min
 
-exports.client_vote = (id, v) !->
-	votes = Db.shared.get('rounds', id, 'votes', Plugin.userId())||[]
-	if v in votes
-		votes.splice votes.indexOf(v), 1
-	else
-		votes.push v
+exports.client_vote = (id, votes) !->
 	Db.shared.merge 'rounds', id, 'votes', Plugin.userId(), votes
 
 exports.client_timer = setTimers = !->
@@ -106,21 +101,18 @@ exports.client_resolve = exports.resolve = resolve = (roundId) !->
 		return votes
 
 	for user in Plugin.userIds()
-		value = answers[user]||[]
-		solution = Util.getSolution(roundId) # seed
-		# calc score
-		hits = 0
-		for i in [0..3]
-			t = value.slice(0) # clone, not point
-			t.splice(t.indexOf(i),1)
-			tt = solution.slice(0) # clone, not point
-			tt.splice(tt.indexOf(i),1)
-			log 'testing', t, tt
-			for j in [0..2]
-				if t[j] is tt[j] then hits++
-
-		score = Math.round(hits*10/12)
-		log "user answer:", value, "solution:", solution, "hits:", hits, "score:", score
+		input = answers[user]||[]
+		continue unless input.length
+		target = Util.getSolution(roundId)
+		# calc score using the V⁴ Method (van Viegen, van Vliet)
+		# there are a maximum of 'steps' needed to bring any answer to the correct order. So the point range from 0 to 6
+		errors = 0
+		while input.length>0
+			errors += index = target.indexOf(input[0])
+			input.splice(0,1)
+			target.splice(index,1)
+		score = 6-errors
+		log "user answer:", input, "solution:", target, "errors:", errors, "score:", score
 
 		# safe scores
 		if score then question.set 'scores', user, score # score for this round. Not needed when it's zero
@@ -151,3 +143,15 @@ exports.reminder = !->
 			for: remind
 			unit: 'remind'
 			text: tr("A question is waiting for your answer!")
+
+# Old Method of calculating scores
+# hits = 0
+# for i in [0..3]
+# 	t = input.slice(0) # clone, not point
+# 	t.splice(t.indexOf(i),1)
+# 	tt = target.slice(0) # clone, not point
+# 	tt.splice(tt.indexOf(i),1)
+# 	log 'testing', t, tt
+# 	for j in [0..2]
+# 		if t[j] is tt[j] then hits++
+# score = Math.round(hits*10/12)

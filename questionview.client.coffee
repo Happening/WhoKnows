@@ -107,8 +107,10 @@ vote = (v) !->
 	# endh Timer()
 
 exports.render = ->
-	Page.setTitle tr("Question")
 	roundId = Page.state.get(0)
+	return whoknows() if Page.state.get(1) is "whoknows"
+
+	Page.setTitle tr("Question")
 	question = Util.getQuestion(roundId) # question array
 	questionOptions = Util.getOptions(roundId) # options array, happening unique seed
 	solution = Util.getSolution(roundId) # options array, user unique seed
@@ -155,7 +157,7 @@ exports.render = ->
 	SoftNav.register 'entering', entering
 	SoftNav.register 'answering', answering
 	SoftNav.register 'answered', answered
-	SoftNav.register 'voting', voting
+	# SoftNav.register 'voting', voting
 	SoftNav.register 'resolved', resolved
 	SoftNav.render()
 
@@ -172,18 +174,17 @@ exports.render = ->
 				SoftNav.nav 'answering'
 			when 'entering'
 				SoftNav.nav 'entering'
-			when 'voting'
-				SoftNav.nav 'voting'
+			# when 'voting'
+			# 	SoftNav.nav 'voting'
 
-	Ui.bigButton "Resolve", !->
-		Server.send 'resolve', roundId
+	if Util.debug()
+		Ui.bigButton "Resolve", !->
+			Server.send 'resolve', roundId
 
 entering = !->
 	renderTimer(true)
 	Dom.div !->
-		Ui.bigButton tr("Ready, go!"), !->
-			log "whop"
-			# start the thing
+		Ui.bigButton tr("Ready, go!"), !-> # start the thing
 			Db.local.set 'start', (Date.now()*.001)
 	Dom.section !->
 		Dom.style padding: "0px 8px 8px"
@@ -224,58 +225,8 @@ answered = !->
 			renderShortAnswer(i) for i in a
 
 	Ui.bigButton tr("Who knows?"), !->
-		stateO.set 'voting'
-
-voting = !->
-	Dom.section !-> # other users
-		Dom.style
-			textAlign: 'center'
-
-		Dom.div !->
-			Dom.style textAlign: 'center'
-			Dom.h4 tr("Select any number of people. You earn a point if they gave a correct answer. But you lose a point if they answered wrong.")
-
-		size = (Page.width()-16) / Math.floor((Page.width()-0)/100)-1
-		Plugin.users.observeEach (user) !->
-			# return if +user.key() is Plugin.userId() # skip yourself
-			Dom.div !->
-				selected = user.key() in (Db.shared.get('rounds', roundId, 'votes', Plugin.userId())||[])
-				Dom.style
-					display: 'inline-block'
-					position: 'relative'
-					padding: '8px'
-					boxSizing: 'border-box'
-					borderRadius: '2px'
-
-				Ui.avatar Plugin.userAvatar(user.key()),
-					size: size-16
-					style:
-						display: 'inline-block'
-						margin: '0 0 1px 0'
-				if selected
-					Icon.render
-						data: Util.inverseCheck()
-						color:  "rgba(105, 240, 136, 0.5)" #'#69f088'
-						size: size-14
-						style:
-							borderRadius: '50%'
-							position: 'absolute'
-							top: '8px'
-							left: '8px'
-							background: "rgba(255, 255, 255, 0.5)"
-
-				Dom.div !->
-					Dom.style fontSize: '18px'
-					Dom.text Form.smileyToEmoji user.get('name')
-				Dom.onTap !->
-					Server.sync 'vote', roundId, user.key(), !->
-						votes = Db.shared.get('rounds', roundId, 'votes', Plugin.userId())||[]
-						if user.key() in votes
-							votes.splice votes.indexOf(user.key()), 1
-						else
-							votes.push user.key()
-						Db.shared.merge 'rounds', roundId, 'votes', Plugin.userId(), votes
-		, (user) -> user.get('name')
+		# stateO.set 'voting'
+		Page.nav {0:roundId, 1:"whoknows"}
 
 resolved = !->
 	Dom.h4 !->
@@ -283,7 +234,8 @@ resolved = !->
 			textAlign: 'center'
 			fontSize: '90%'
 		Dom.text tr("Correct answer was:")
-	renderAnswer(i, true) for i in [0..3]
+	# renderAnswer(i, true) for i in [0..3]
+	renderAnswers(false, true)
 
 	Dom.section !->
 		userAnswers = Db.shared.get 'rounds', roundId, 'answers'
@@ -428,3 +380,77 @@ renderTimer = !->
 
 renderAnswers = (hideAnswers = false, solution = false) !->
 	renderAnswer(i, solution, hideAnswers) for i in [0..3]
+
+whoknows = !->
+	# check if we arrived here validly
+	if !Db.shared.get 'rounds', roundId, 'new'
+		Ui.emptyText tr("Voting just closed, sorry!")
+		return
+
+	initialValue = Db.shared.peek('rounds', roundId, 'votes', Plugin.userId())||{}
+	votesO = Obs.create initialValue
+	initialValue = JSON.stringify initialValue
+	log initialValue
+	Dom.section !-> # other users
+		Dom.style
+			textAlign: 'center'
+
+		hiddenForm = Form.hidden 'submitTrigger'
+
+		Form.setPageSubmit (values) !->
+			log "sync"
+			Server.sync 'vote', roundId, votesO.peek(), !->
+				Db.shared.merge 'rounds', roundId, 'votes', Plugin.userId(), votesO.peek()
+			Page.back()
+
+		Dom.div !->
+			Dom.style textAlign: 'center'
+			Dom.h4 tr("Select any number of people. You earn a point if they gave a correct answer. But you lose a point if they answered wrong.")
+
+		size = (Page.width()-16) / Math.floor((Page.width()-0)/100)-1
+		Plugin.users.observeEach (user) !->
+			# return if +user.key() is Plugin.userId() # skip yourself
+			Dom.div !->
+				v = votesO.get()
+				selected = v[user.key()]
+				log selected
+				Dom.style
+					display: 'inline-block'
+					position: 'relative'
+					padding: '8px'
+					boxSizing: 'border-box'
+					borderRadius: '2px'
+
+				Ui.avatar Plugin.userAvatar(user.key()),
+					size: size-16
+					style:
+						display: 'inline-block'
+						margin: '0 0 1px 0'
+				if selected
+					Icon.render
+						data: Util.inverseCheck()
+						color:  "rgba(105, 240, 136, 0.5)" #'#69f088'
+						size: size-14
+						style:
+							borderRadius: '50%'
+							position: 'absolute'
+							top: '8px'
+							left: '8px'
+							background: "rgba(255, 255, 255, 0.5)"
+
+				Dom.div !->
+					Dom.style fontSize: '18px'
+					Dom.text Form.smileyToEmoji user.get('name')
+				Dom.onTap !->
+					v = votesO.peek user.key()
+					if v
+						votesO.remove user.key()
+					else
+						votesO.set user.key(), true
+
+					if JSON.stringify(votesO.peek()) is initialValue
+						hiddenForm.value null
+					else
+						hiddenForm.value true
+
+		, (user) -> user.get('name')

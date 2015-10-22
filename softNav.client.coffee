@@ -12,7 +12,8 @@ exports.render = !->
 	for k,v of pages
 		Dom.div !->
 			Dom.style display: 'none'
-			v.call()
+			Dom.addClass k
+			Obs.observe v # this does the actualy page drawing
 			containers[k] = Dom.get()
 
 exports.nav = (id) !->
