@@ -29,7 +29,7 @@ exports.client_answer = (id, a) !->
 		Timer.set 120*1000, 'resolve' # resolve after 2 min
 
 exports.client_vote = (id, votes) !->
-	Db.shared.merge 'rounds', id, 'votes', Plugin.userId(), votes
+	Db.shared.set 'rounds', id, 'votes', Plugin.userId(), votes
 
 exports.client_timer = setTimers = !->
 	log "setTimers called"
@@ -123,19 +123,22 @@ exports.client_resolve = exports.resolve = resolve = (roundId) !->
 		# safe scores
 		if score then question.set 'scores', user, score # score for this round. Not needed when it's zero
 
-		question.set 'new', null # flag question as resolved
-
-	for user in Plugin.userIds()
-		score = 0
-		votes = question.get 'votes', user
-		for k,v of votes
-			score+=v
-			log "incr", user, k, v
-		if score then question.set 'results', user, score
-		# safe to db
 		Db.shared.incr 'scores', user, score # global
 
 	# add to score, the result of their who knows comp.
+	for user in Plugin.userIds()
+		result = 0
+		votes = question.get 'votes', user
+	for k,v of votes
+			log typeof(v)
+			if typeof(v) is 'number'
+				result+=v
+				log "incr", user, k, v
+		if result then question.set 'results', user, result
+		# safe to db
+		Db.shared.incr 'scores', user, result # global
+
+	question.set 'new', null # flag question as resolved
 
 	Event.create
 		unit: 'round'

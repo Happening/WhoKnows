@@ -13,9 +13,10 @@ SoftNav = require 'softNav'
 Icon = require 'icon'
 
 # red, yellow x 4, light green, dark green
-scoreColors = ['#ff6666', '#ff9e66', '#ffcf66', '#ffe866', '#fff566', '#80ff80', '#4dff7c']
+# scoreColors = ['#ff6666', '#ff9e66', '#ffcf66', '#ffe866', '#fff566', '#80ff80', '#4dff7c']
 
-timeOut = (if Util.debug() then 600 else 20) # you have 20 seconds to answer the question
+questionTime = (if Util.debug() then 600 else 20) # you have 20 seconds to answer the question
+enterDelay = 5
 questionID = 0
 roundId = 0
 order = []
@@ -25,24 +26,23 @@ solution = []
 items = []
 stateO = Obs.create('entering')
 cooldownO = Obs.create(null)
+pingO = Obs.create true
 
-renderAnswer = (i, isResult = false, empty = false) !->
+renderAnswer = (i, isResult = false, empty = false, showOwn = false) !->
+	answerIndex = (Db.local.get('answer') || [])[i]
+	if isResult
+		i = solution[i]
 	Dom.div !->
-		if !isResult
-			givenAnswer = Db.local.get('answer') || []
-			selected = givenAnswer.indexOf i
-		else
-			i = solution[i]
-			selected = i
 		Dom.style
-			backgroundColor: "hsl(#{360/5*i},100%,#{if selected>=0 and !isResult then 71 else 87}%)"
 			position: 'relative'
-			borderRadius: '2px'
 			margin: "8px 0px 0px"# unless isResult
+			Box: 'left'
 		Dom.div !->
 			Dom.style
+				backgroundColor: "hsl(#{360/5*i},100%,87%)"
 				Box: 'left'
-				margin: '0px'
+				Flex: true
+				borderRadius: '2px'
 			Dom.div !->
 				Dom.style
 					_boxSizing: 'border-box'
@@ -50,7 +50,6 @@ renderAnswer = (i, isResult = false, empty = false) !->
 					Box: 'middle center'
 					fontWeight: 'bold'
 					backgroundColor: "rgba(0,0,0,0.1)"
-				# Dom.text if selected < 0 then "" else (selected+1)
 				Dom.text ["A", "B", "C", "D"][i]
 			Dom.div !->
 				Dom.style
@@ -59,36 +58,31 @@ renderAnswer = (i, isResult = false, empty = false) !->
 					padding: "4px 8px"
 					_boxSizing: 'border-box'
 					minHeight: '30px'
-				Dom.userText questionOptions[i] unless empty
-			unless isResult or empty
-				Dom.onTap !->
-					if selected>=0 # we are already selected, remove ourself
-						givenAnswer.splice selected, 1
-					givenAnswer.push i
-					Db.local.set 'answer', givenAnswer
-					log "set order", i, givenAnswer
-					# To the server
-					Server.sync 'answer', roundId, givenAnswer, !->
-						Db.shared.merge 'rounds', roundId, 'answers', Plugin.userId(), givenAnswer
-			Dom.div !->
-				if selected>=0 and !isResult
-					Dom.style
-						_boxSizing: 'border-box'
-						width: '28px'
-						Box: 'middle center'
-						fontWeight: 'bold'
-						backgroundColor: "rgba(255,255,255,0.4)"
-					Dom.text (selected+1)
+				if not empty
+					Dom.userText questionOptions[i]
+		if showOwn
+			Dom.div !-> # your answer
+				Dom.style
+					_boxSizing: 'border-box'
+					width: '28px'
+					Box: 'middle center'
+					fontWeight: 'bold'
+					marginLeft: '8px'
+					backgroundColor: "hsl(#{360/5*answerIndex},100%,87%)"
+				Dom.text ["A", "B", "C", "D"][answerIndex]
 
 renderDraggableAnswer = (index, containerE) ->
 	offsetO = Obs.create 0
 	Dom.div !->
-		Dom.style
-			backgroundColor: "hsl(#{360/5*index},100%,87%)"
-			position: 'relative'
-			borderRadius: '2px'
-			margin: "8px 0px 0px"# unless isResult
-			_transform: "translateY(#{offsetO.get()}px)"
+		Obs.observe !->
+			Dom.style
+				backgroundColor: "hsl(#{360/5*index},100%,87%)"
+				position: 'relative'
+				borderRadius: '2px'
+				margin: "8px 0px 0px"# unless isResult
+				_transform: "translateY(#{offsetO.get()}px)"
+				transition_: 'transform 0.4s ease-out'
+				WebkitTransition_: 'transform 0.4s ease-out'
 		Dom.div !->
 			Dom.style
 				Box: 'left'
@@ -124,9 +118,29 @@ renderDraggableAnswer = (index, containerE) ->
 		getOffset = ->
 			offsetO.peek()
 
+		element = Dom.get()
+
+		# make item
+		thisItem = {}
+		remake = (idx, cE, o)->
+			log "doing remake", idx, "height:", element.height()
+			thisItem =
+				height: element.height()
+				halfHeight: element.height()/2
+				yTop: (element.getOffsetXY().y - cE.getOffsetXY().y)
+				yHalf: (element.getOffsetXY().y - cE.getOffsetXY().y) + element.height()/2
+				yBot: (element.getOffsetXY().y - cE.getOffsetXY().y) + element.height()
+				order: o
+				value: idx
+				e: element
+				remake: remake
+				setOffset: setOffset
+				getOffset: getOffset
+		log "main remake"
+		thisItem = remake(index, containerE, items.length)
+		items.push thisItem
 
 		# Draggable
-		element = Dom.get()
 		upperLimit = 0
 		lowerLimit = 0
 		oldY = 0
@@ -143,14 +157,20 @@ renderDraggableAnswer = (index, containerE) ->
 			if touch.op&1
 				# dragPosition = item.order # Start position
 				upperLimit = containerE.height() - yPos - element.height()/2
-				lowerLimit = -yPos
+				lowerLimit = -yPos - element.height()/2
 				oldY = yPos + element.height()/2
 				curOrder = index
 				oldDraggedY = draggedY
-				log "limit:", upperLimit, "(", containerE.height(), element.getOffsetXY().y,")"
-				element.style
-					backgroundColor: "hsl(#{360/5*index},100%,67%)"
-					zIndex: "99"
+				element.addClass "dragging"
+
+				# check if items hold actual values
+				if not items[0].height
+					log "----items list hold zeros----"
+					newItems = []
+					for oldItem, o in items
+						newItems.push oldItem.remake(oldItem.value, containerE, o)
+					items = newItems
+					log items
 
 			# Touch move
 			element.style _transform: "translateY(#{draggedY}px)"
@@ -171,17 +191,22 @@ renderDraggableAnswer = (index, containerE) ->
 
 			# Touch end
 			if touch.op&4 # touch is stopped
-				element.style backgroundColor: "hsl(#{360/5*index},100%,87%)"
+				element.removeClass "dragging"
 				element.style
 					_transform: "translateY(0)"
-					zIndex: ''
 				# set order, ready for redraw
+				order = (i.order for i in items)
+				value = (i.value for i in items)
+				answer = []
+				answer[order[i]] = value[i] for i in [0..3]
+				Server.sync 'answer', roundId, answer, !->
+					Db.shared.set('rounds', roundId, 'answers', Plugin.userId(), answer)
 
 			oldY = draggedElementY
 
 		onDrag = (draggedElementY) !->
 			for item, i in items
-				if i is index
+				if item is thisItem
 					continue
 					# above myself. no order change?
 				trans = item.getOffset()
@@ -189,38 +214,23 @@ renderDraggableAnswer = (index, containerE) ->
 
 					# if over top or bottom half?
 					if draggedElementY < item.yHalf+trans # top half
-						item.e.style border: '1px solid blue'
-						log curOrder, item.order
-						if curOrder > item.order
+						if Util.debug() then item.e.style border: '1px solid blue'
+						if thisItem.order > item.order
 							t = if trans < 0 then 0 else element.height()+8
 							item.setOffset t
-							curOrder = item.order
-							item.order++
+							temp = thisItem.order
+							thisItem.order = item.order
+							item.order = temp
 					else # bottom half
-						item.e.style border: '1px solid red'
-						if curOrder < item.order
-							curOrder = item.order
-							item.order--
+						if Util.debug() then item.e.style border: '1px solid red'
+						if thisItem.order < item.order
 							t = if trans > 0 then 0 else -(element.height()+8)
 							item.setOffset t
+							temp = thisItem.order
+							thisItem.order = item.order
+							item.order = temp
 				else
 					item.e.style border: ''
-
-		# return stuff we want in the items array
-		setTimeout !-> # after draw call
-			r =
-				height: element.height()
-				halfHeight: element.height()/2
-				yTop: (element.getOffsetXY().y - containerE.getOffsetXY().y)
-				yHalf: (element.getOffsetXY().y - containerE.getOffsetXY().y) + element.height()/2
-				yBot: (element.getOffsetXY().y - containerE.getOffsetXY().y) + element.height()
-				order: index
-				e: element
-				setOffset: setOffset
-				getOffset: getOffset
-			items.push r
-		, 0
-
 
 renderShortAnswer = (i) !->
 	Dom.div !->
@@ -258,9 +268,6 @@ exports.render = ->
 	questionOptions = Util.getOptions(roundId) # options array, happening unique seed
 	solution = Util.getSolution(roundId) # options array, user unique seed
 
-	Dom.div !->
-		Dom.text Db.local.get('answer')
-
 	# determine state
 	Obs.observe !->
 		resolved = !Db.shared.get 'rounds', roundId, 'new'
@@ -286,16 +293,8 @@ exports.render = ->
 
 	# Page
 	Obs.observe !->
-		switch stateO.get() 
-			when 'entering'
-				Dom.div !-> # question
-					Dom.style
-						textAlign: 'center'
-					Dom.h4 tr("Are you ready to answer the question?")
-			when 'voting'
-				log "nothing"
-			else
-				renderQuestion()
+		unless stateO.get() is 'entering'
+			renderQuestion()
 
 	SoftNav.register 'entering', entering
 	SoftNav.register 'answering', answering
@@ -312,10 +311,23 @@ exports.render = ->
 				SoftNav.nav 'resolved'
 			when 'answered'
 				SoftNav.nav 'answered'
+				whoknows()
 			when 'answering'
 				Obs.observe count
+				Form.setPageSubmit (values) !->
+					log "done"
+					endTimer()
+				, 1
 				SoftNav.nav 'answering'
 			when 'entering'
+				cooldownO.set enterDelay
+				Obs.onTime enterDelay*1000, !->
+					Db.local.set 'start', (Date.now()*.001)
+				tick = !->
+					timer = Obs.onTime 1000, !->
+						tick()
+						cooldownO.incr -1
+				tick()
 				SoftNav.nav 'entering'
 			# when 'voting'
 			# 	SoftNav.nav 'voting'
@@ -325,41 +337,81 @@ exports.render = ->
 			Server.send 'resolve', roundId
 
 entering = !->
-	renderTimer(true)
+	# renderTimer(true)
+	# Dom.div !->
+	# 	Ui.bigButton tr("Ready, go!"), !-> # start the thing
+	# 		Db.local.set 'start', (Date.now()*.001)
+	# Dom.section !->
+	# 	Dom.style padding: "0px 8px 8px"
+	# 	Dom.h4 !->
+	# 		Dom.text tr("Answers:")
+	# 	renderAnswers(true)
 	Dom.div !->
-		Ui.bigButton tr("Ready, go!"), !-> # start the thing
-			Db.local.set 'start', (Date.now()*.001)
-	Dom.section !->
-		Dom.style padding: "0px 8px 8px"
-		Dom.h4 !->
-			Dom.text tr("Answers:")
-		renderAnswers(true)
+		Dom.style
+			height: '100%'
+			margin: '-8px'
+			background: '#333'
+			Box: 'vertical center middle'
+			textAlign: 'center'
+			color: 'aaa'
+		Dom.div !->
+			Dom.style
+				position: 'relative'
+				padding: '30px 20px'
+				boxSizing: 'border-box'
+				Box: 'center'
+				width: '100%'
+			renderTimer(enterDelay, "#{Page.width()*.8}px")
+		Dom.text tr("Get ready to answer the question by dragging four intems to the correct order.")
+		# Ui.bigButton tr("Ready, go!"), !-> # start the thing
+			# Db.local.set 'start', (Date.now()*.001)
 
 answering = !->
-	renderTimer()
+	renderTimer(20)
 	Dom.section !->
-		Dom.style padding: "0px 8px 8px"
+		Dom.style
+			padding: "0px 8px 8px"
+			margin: '0px -8px'
 		Dom.h4 !->
 			Dom.text tr("Answers:")
 		# renderAnswers()
-		items = []
 		Dom.div !->
+			log "--rendering items--"
+			items = []
 			order = Db.shared.get('rounds', roundId, 'answers', Plugin.userId())||[0,1,2,3]
-			Dom.text order
 			renderDraggableAnswer(i, Dom.get()) for i in order
-			# renderAnswer(1)
-			# renderAnswer(2)
-			# renderAnswer(3)
 
-	Ui.bigButton tr("Done"), !->
-		endTimer()
+	Dom.css
+		".dragging":
+			opacity: 0.6
+			zIndex: 99
+			_transition: 'initial !important'
+			_backfaceVisibility: 'hidden'
+
+	if Util.debug()
+		Ui.bigButton tr("ReOrder"), !->
+			for t,i in items
+				t.order = i
+			order = [items[0].order, items[1].order, items[2].order, items[3].order]
+			log order
+			Server.sync 'answer', roundId, order, !->
+				Db.shared.set('rounds', roundId, 'answers', Plugin.userId(), order)
 
 answered = !->
 	Dom.section !->
-		Dom.style padding: "0px 8px 8px"
-		Dom.h4 !->
-			Dom.text tr("The correct answer was:")
-		renderAnswers(false, true)
+		Dom.style padding: "8px"
+		Dom.div !->
+			Dom.style
+				Box: 'left'
+				margin: '0px'
+				padding: '0px'
+			Dom.h4 !->
+				Dom.style Flex: true, margin: '0px'
+				Dom.text tr("The correct answer was:")
+			Dom.h4 !->
+				Dom.style margin: '0px'
+				Dom.text tr("Your:")
+		renderAnswers(false, true, true)
 
 	a = Db.shared.get('rounds', roundId, 'answers', Plugin.userId())||[]
 	if !a.length
@@ -369,15 +421,15 @@ answered = !->
 				padding: '20px'
 			Dom.h4 !->
 				Dom.text tr("Sorry, the time is up.")
-	Dom.section !-> # given answer
-		Dom.h4 tr("Your given answer was:")
-		Dom.div !->
-			Dom.style Box: 'center'
-			renderShortAnswer(i) for i in a
+	# Dom.section !-> # given answer
+	# 	Dom.h4 tr("Your given answer was:")
+	# 	Dom.div !->
+	# 		Dom.style Box: 'center'
+	# 		renderShortAnswer(i) for i in a
 
-	Ui.bigButton tr("Who knows?"), !->
-		# stateO.set 'voting'
-		Page.nav {0:roundId, 1:"whoknows"}
+
+	# Ui.bigButton tr("Who knows?"), !->
+	# 	Page.nav {0:roundId, 1:"whoknows"}
 
 resolved = !->
 	Dom.h4 !->
@@ -389,105 +441,40 @@ resolved = !->
 	renderAnswers(false, true)
 
 	Dom.section !->
-		userVotes = Db.shared.get 'rounds', roundId, 'votes'
-
-		getVotes = (uId) !->
-			votes = 0
-			for k,v of userVotes
-				for k2,v2 of v
-					if +k2 is +uId then ++votes
-			return votes
-
-		Dom.style
-			margin: "8px -8px 0px"
-			padding: "4px 0px"
-
-		# legend
-		Dom.div !->
-			Dom.style
-				Box: 'left'
-				margin: '4px 8px'
-				textAlign: 'center'
-				fontWeight: 'lighter'
-				color: '#888'
-			Dom.div !->
-				Dom.style width: '40px'
-				Dom.text tr("user")
-			Dom.div !->
-				Dom.style width: '40px'
-				Dom.text tr("score")
-			Dom.div !->
-				Dom.style Flex: true
-				Dom.text tr("voted on")
-			Dom.div !->
-				Dom.style width: '35px'
-				Dom.text tr("total")
-
-		# User results
+		Dom.style margin: "8px -8px 0px"
 		Plugin.users.observeEach (user) !->
-			Dom.div !->
-				Dom.style
-					Box: 'left middle'
-					margin: '4px 8px'
+			return unless Plugin.userName(user.key())? # skip empty (like 0)
+			Ui.item !->
+				Dom.div !->
 				Ui.avatar Plugin.userAvatar(user.key()),
 					style:
-						margin: '0 0 1px 0'
-
-				Dom.div !-> # score
-					s = Db.shared.peek('rounds', roundId, 'scores', user.key())||0
+						position: 'inline-block'
+					onTap: !-> Plugin.userInfo(user.key())
+				Dom.div !->
 					Dom.style
-						width: '30px'
-						height: '30px'
-						lineHeight: '30px'
-						fontSize: '18px'
-						margin: "5px 0px 5px 5px"
-						textAlign: 'center'
-						borderRadius: '2px'
-						backgroundColor: scoreColors[s]
-					Dom.text s
-
-				Dom.div !-> # show votes
-					Dom.style
-						margin: "5px 8px"
 						Flex: true
-						Box: 'left'
-						overflow: 'hidden'
-					votes = Db.shared.get('rounds', roundId, 'votes', user.key())||[]
-					for k,v of votes
-						Dom.div !->
-							Dom.style
-								position: 'relative'
-							Ui.avatar Plugin.userAvatar(k),
-								size: 28
-								style:
-									margin: '0px 2px'
-							Dom.div !->
-								Dom.style
-									borderRadius: '50%'
-									position: 'absolute'
-									top: '0px'
-									left: '2px'
-									height: '30px'
-									width: '30px'
-									backgroundColor:  if v > 0 then "rgba(105, 240, 136, 0.3)" else "rgba(255, 102, 102, 0.3)"
-
-				Dom.div !-> # totals
+						marginLeft: '10px'
+					Dom.text Plugin.userName(user.key())
+				Dom.div !->
+					Dom.style
+						marginRight: '-6px'
+						fontSize: '130%'
 					r = Db.shared.peek('rounds', roundId, 'results', user.key())||0
 					s = Db.shared.peek('rounds', roundId, 'scores', user.key())||0
-					Dom.style
-						width: '30px'
-						height: '30px'
-						lineHeight: '30px'
-						fontSize: '18px'
-						margin: "5px 0px 5px 5px"
-						textAlign: 'center'
-						borderRadius: '2px'
-						backgroundColor: scoreColors[Math.min(6,(r+s))]
-					Dom.text (r+s)
-		, (user) -> -Db.shared.peek('rounds', roundId, 'scores', user.key())||0
+
+					Dom.text s
+					Dom.div !->
+						Dom.style
+							display: 'inline-block'
+							textAlign: 'center'
+							width: '20px'
+						Dom.text (if r>=0 then " + " else "  - ")
+					Dom.text Math.abs(r)
+		, (user) ->
+			-((Db.shared.peek('rounds', roundId, 'scores', user.key())||0)+(Db.shared.peek('rounds', roundId, 'results', user.key())||0))
 
 count = !-> # ♫ Final countdown! ♬
-	c = Db.local.peek('start') + timeOut # ten seconds
+	c = Db.local.peek('start') + questionTime # ten seconds
 	c = Math.floor(c - (0|(Date.now()*.001)))
 	cooldownO.set c
 	if c > 0
@@ -502,13 +489,14 @@ renderQuestion = !->
 			textAlign: 'center'
 		Dom.h4 question[0]
 
-renderTimer = !->
+renderTimer = (timeOut, size)!->
 	Dom.div !-> # timer
 		Obs.observe !->
 			Dom.style
 				position: 'relative'
 				height: '30px'
-				backgroundColor: "hsl(#{130/timeOut*+(cooldownO.get()||timeOut)},100%, #{87 - Math.pow(timeOut-(cooldownO.get()||timeOut),1.5)}%)"
+				width: size||"#{Page.width()}px"
+				backgroundColor: "hsl(#{130/timeOut*+(cooldownO.get()||timeOut)},100%, #{95 - Math.pow(timeOut-(cooldownO.get()||timeOut),0.7)}%)"
 				margin: "0px -8px"
 				textAlign: 'center'
 				color: 'black'
@@ -522,10 +510,10 @@ renderTimer = !->
 					position: 'absolute'
 					top: '0px'
 					left: '0px'
-					width: '100%'
+					width: size||"#{Page.width()}px"
 					height: '30px'
-					backgroundColor: "hsl(#{130/timeOut*+(cooldownO.get()||timeOut)},100%, 50%)"
-					_transform: "scaleX(#{(cooldownO.get()||timeOut)*0.1})"
+					backgroundColor: "hsl(#{130/timeOut*+(cooldownO.get()||timeOut)},100%, #{87 - Math.pow(timeOut-(cooldownO.get()||timeOut),0.3)}%)"
+					_transform: "scaleX(#{(cooldownO.get()||timeOut)/timeOut})"
 					_transition: "transform 2s, background-color 1s linear"
 					WebkitTransition_: "transform 1s linear, background-color 1s linear"
 		Dom.div !->
@@ -533,8 +521,8 @@ renderTimer = !->
 				_transform: 'translate3D(0,0,0)'
 			Dom.text cooldownO.get()||timeOut
 
-renderAnswers = (hideAnswers = false, solution = false) !->
-	renderAnswer(i, solution, hideAnswers) for i in [0..3]
+renderAnswers = (hideAnswers = false, solution = false, showOwn = false) !->
+	renderAnswer(i, solution, hideAnswers, showOwn) for i in [0..3]
 
 whoknows = !->
 	# check if we arrived here validly
@@ -545,7 +533,6 @@ whoknows = !->
 	initialValue = Db.shared.peek('rounds', roundId, 'votes', Plugin.userId())||{}
 	votesO = Obs.create initialValue
 	initialValue = JSON.stringify initialValue
-	log initialValue
 	Dom.section !-> # other users
 		Dom.style
 			textAlign: 'center'
@@ -553,9 +540,9 @@ whoknows = !->
 		hiddenForm = Form.hidden 'submitTrigger'
 
 		Form.setPageSubmit (values) !->
-			log "sync"
+			log "sync", votesO.peek()
 			Server.sync 'vote', roundId, votesO.peek(), !->
-				Db.shared.merge 'rounds', roundId, 'votes', Plugin.userId(), votesO.peek()
+				Db.shared.set 'rounds', roundId, 'votes', Plugin.userId(), votesO.peek()
 			Page.back()
 
 		Dom.div !->
@@ -610,7 +597,114 @@ whoknows = !->
 
 		, (user) -> user.get('name')
 
-# old render result:
+# Old render result:
+# Dom.h4 !->
+# 	Dom.style
+# 		textAlign: 'center'
+# 		fontSize: '90%'
+# 	Dom.text tr("Correct answer was:")
+# # renderAnswer(i, true) for i in [0..3]
+# renderAnswers(false, true)
+
+# Dom.section !->
+# 	userVotes = Db.shared.get 'rounds', roundId, 'votes'
+
+# 	getVotes = (uId) !->
+# 		votes = 0
+# 		for k,v of userVotes
+# 			for k2,v2 of v
+# 				if +k2 is +uId then ++votes
+# 		return votes
+
+# 	Dom.style
+# 		margin: "8px -8px 0px"
+# 		padding: "4px 0px"
+
+# 	# legend
+# 	Dom.div !->
+# 		Dom.style
+# 			Box: 'left'
+# 			margin: '4px 8px'
+# 			textAlign: 'center'
+# 			fontWeight: 'lighter'
+# 			color: '#888'
+# 		Dom.div !->
+# 			Dom.style width: '40px'
+# 			Dom.text tr("user")
+# 		Dom.div !->
+# 			Dom.style width: '40px'
+# 			Dom.text tr("score")
+# 		Dom.div !->
+# 			Dom.style Flex: true
+# 			Dom.text tr("voted on")
+# 		Dom.div !->
+# 			Dom.style width: '35px'
+# 			Dom.text tr("total")
+
+# 	# User results
+# 	Plugin.users.observeEach (user) !->
+# 		Dom.div !->
+# 			Dom.style
+# 				Box: 'left middle'
+# 				margin: '4px 8px'
+# 			Ui.avatar Plugin.userAvatar(user.key()),
+# 				style:
+# 					margin: '0 0 1px 0'
+
+# 			Dom.div !-> # score
+# 				s = Db.shared.peek('rounds', roundId, 'scores', user.key())||0
+# 				Dom.style
+# 					width: '30px'
+# 					height: '30px'
+# 					lineHeight: '30px'
+# 					fontSize: '18px'
+# 					margin: "5px 0px 5px 5px"
+# 					textAlign: 'center'
+# 					borderRadius: '2px'
+# 					backgroundColor: scoreColors[s]
+# 				Dom.text s
+
+# 			Dom.div !-> # show votes
+# 				Dom.style
+# 					margin: "5px 8px"
+# 					Flex: true
+# 					Box: 'left'
+# 					overflow: 'hidden'
+# 				votes = Db.shared.get('rounds', roundId, 'votes', user.key())||[]
+# 				for k,v of votes
+# 					Dom.div !->
+# 						Dom.style
+# 							position: 'relative'
+# 						Ui.avatar Plugin.userAvatar(k),
+# 							size: 28
+# 							style:
+# 								margin: '0px 2px'
+# 						Dom.div !->
+# 							Dom.style
+# 								borderRadius: '50%'
+# 								position: 'absolute'
+# 								top: '0px'
+# 								left: '2px'
+# 								height: '30px'
+# 								width: '30px'
+# 								backgroundColor:  if v > 0 then "rgba(105, 240, 136, 0.3)" else "rgba(255, 102, 102, 0.3)"
+
+# 			Dom.div !-> # totals
+# 				r = Db.shared.peek('rounds', roundId, 'results', user.key())||0
+# 				s = Db.shared.peek('rounds', roundId, 'scores', user.key())||0
+# 				Dom.style
+# 					width: '30px'
+# 					height: '30px'
+# 					lineHeight: '30px'
+# 					fontSize: '18px'
+# 					margin: "5px 0px 5px 5px"
+# 					textAlign: 'center'
+# 					borderRadius: '2px'
+# 					backgroundColor: scoreColors[Math.min(6,(r+s))]
+# 				Dom.text (r+s)
+# 	, (user) -> -Db.shared.peek('rounds', roundId, 'scores', user.key())||0
+
+# Older render result:
 
 # legend
 # Dom.div !->
