@@ -25,7 +25,7 @@ renderQuestion = (qid) !->
 			borderRadius: '2px'
 		if unResolved # either answered (but not resolved) or unanswered
 			Icon.render
-				data: if answered is 0 then 'question' else 'chronometer' #question2
+				data: if answered is 0 then 'question' else 'clock2' #question2
 				size: 30
 				color: '#5b0' if unread
 				style:

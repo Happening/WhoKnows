@@ -12,9 +12,6 @@ Util = require 'util'
 SoftNav = require 'softNav'
 Icon = require 'icon'
 
-# red, yellow x 4, light green, dark green
-# scoreColors = ['#ff6666', '#ff9e66', '#ffcf66', '#ffe866', '#fff566', '#80ff80', '#4dff7c']
-
 questionTime = (if Util.debug() then 600 else 20) # you have 20 seconds to answer the question
 enterDelay = 5
 questionID = 0
@@ -26,7 +23,6 @@ solution = []
 items = []
 stateO = Obs.create('entering')
 cooldownO = Obs.create(null)
-pingO = Obs.create true
 
 renderAnswer = (i, isResult = false, empty = false, showOwn = false) !->
 	answerIndex = (Db.local.get('answer') || [])[i]
@@ -232,19 +228,6 @@ renderDraggableAnswer = (index, containerE) ->
 				else
 					item.e.style border: ''
 
-renderShortAnswer = (i) !->
-	Dom.div !->
-		Dom.style
-			_boxSizing: 'border-box'
-			Flex: true
-			Box: 'middle center'
-			height: '30px'
-			margin: '0px 4px'
-			fontWeight: 'bold'
-			backgroundColor: "hsl(#{360/5*i},100%,87%)"
-			borderRadius: '2px'
-		Dom.text ["A", "B", "C", "D"][i]
-
 startTimer = !->
 	Db.local.set 'start', Math.floor(0|(Date.now()*.001))
 	# already set the answer on the server to "user gave no answer"
@@ -253,11 +236,6 @@ startTimer = !->
 
 endTimer = !->
 	Db.local.remove 'start'
-
-# vote = (v) !->
-# 	Server.sync 'vote', roundId, v, !->
-# 		Db.shared.merge 'rounds', roundId, 'votes', Plugin.userId(), v
-# 	# endh Timer()
 
 exports.render = ->
 	roundId = Page.state.get(0)
@@ -337,15 +315,6 @@ exports.render = ->
 			Server.send 'resolve', roundId
 
 entering = !->
-	# renderTimer(true)
-	# Dom.div !->
-	# 	Ui.bigButton tr("Ready, go!"), !-> # start the thing
-	# 		Db.local.set 'start', (Date.now()*.001)
-	# Dom.section !->
-	# 	Dom.style padding: "0px 8px 8px"
-	# 	Dom.h4 !->
-	# 		Dom.text tr("Answers:")
-	# 	renderAnswers(true)
 	Dom.div !->
 		Dom.style
 			height: '100%'
@@ -362,9 +331,7 @@ entering = !->
 				Box: 'center'
 				width: '100%'
 			renderTimer(enterDelay, "#{Page.width()*.8}px")
-		Dom.text tr("Get ready to answer the question by dragging four intems to the correct order.")
-		# Ui.bigButton tr("Ready, go!"), !-> # start the thing
-			# Db.local.set 'start', (Date.now()*.001)
+		Dom.text tr("Get ready to answer the question by dragging four items to the correct order.")
 
 answering = !->
 	renderTimer(20)
@@ -421,15 +388,6 @@ answered = !->
 				padding: '20px'
 			Dom.h4 !->
 				Dom.text tr("Sorry, the time is up.")
-	# Dom.section !-> # given answer
-	# 	Dom.h4 tr("Your given answer was:")
-	# 	Dom.div !->
-	# 		Dom.style Box: 'center'
-	# 		renderShortAnswer(i) for i in a
-
-
-	# Ui.bigButton tr("Who knows?"), !->
-	# 	Page.nav {0:roundId, 1:"whoknows"}
 
 resolved = !->
 	Dom.h4 !->
@@ -437,7 +395,6 @@ resolved = !->
 			textAlign: 'center'
 			fontSize: '90%'
 		Dom.text tr("Correct answer was:")
-	# renderAnswer(i, true) for i in [0..3]
 	renderAnswers(false, true)
 
 	Dom.section !->
@@ -549,7 +506,7 @@ whoknows = !->
 			Dom.style textAlign: 'center'
 			Dom.h4 tr("Select any number of people. You earn a point if they gave a correct answer. But you lose a point if they answered wrong.")
 
-		size = (Page.width()-16) / Math.floor((Page.width()-0)/100)-1
+		size = (Page.width()-40) / Math.floor((Page.width()-0)/100)-1
 		Plugin.users.observeEach (user) !->
 			# return if +user.key() is Plugin.userId() # skip yourself
 			Dom.div !->
@@ -581,7 +538,11 @@ whoknows = !->
 							background: "rgba(255, 255, 255, 0.5)"
 
 				Dom.div !->
-					Dom.style fontSize: '18px'
+					Dom.style
+						width: "#{size-16}px"
+						textOverflow: 'ellipsis'
+						whiteSpace: 'nowrap'
+						fontSize: '90%'
 					Dom.text Form.smileyToEmoji user.get('name')
 				Dom.onTap !->
 					v = votesO.peek user.key()
@@ -596,191 +557,3 @@ whoknows = !->
 						hiddenForm.value true
 
 		, (user) -> user.get('name')
-
-# Old render result:
-# Dom.h4 !->
-# 	Dom.style
-# 		textAlign: 'center'
-# 		fontSize: '90%'
-# 	Dom.text tr("Correct answer was:")
-# # renderAnswer(i, true) for i in [0..3]
-# renderAnswers(false, true)
-
-# Dom.section !->
-# 	userVotes = Db.shared.get 'rounds', roundId, 'votes'
-
-# 	getVotes = (uId) !->
-# 		votes = 0
-# 		for k,v of userVotes
-# 			for k2,v2 of v
-# 				if +k2 is +uId then ++votes
-# 		return votes
-
-# 	Dom.style
-# 		margin: "8px -8px 0px"
-# 		padding: "4px 0px"
-
-# 	# legend
-# 	Dom.div !->
-# 		Dom.style
-# 			Box: 'left'
-# 			margin: '4px 8px'
-# 			textAlign: 'center'
-# 			fontWeight: 'lighter'
-# 			color: '#888'
-# 		Dom.div !->
-# 			Dom.style width: '40px'
-# 			Dom.text tr("user")
-# 		Dom.div !->
-# 			Dom.style width: '40px'
-# 			Dom.text tr("score")
-# 		Dom.div !->
-# 			Dom.style Flex: true
-# 			Dom.text tr("voted on")
-# 		Dom.div !->
-# 			Dom.style width: '35px'
-# 			Dom.text tr("total")
-
-# 	# User results
-# 	Plugin.users.observeEach (user) !->
-# 		Dom.div !->
-# 			Dom.style
-# 				Box: 'left middle'
-# 				margin: '4px 8px'
-# 			Ui.avatar Plugin.userAvatar(user.key()),
-# 				style:
-# 					margin: '0 0 1px 0'
-
-# 			Dom.div !-> # score
-# 				s = Db.shared.peek('rounds', roundId, 'scores', user.key())||0
-# 				Dom.style
-# 					width: '30px'
-# 					height: '30px'
-# 					lineHeight: '30px'
-# 					fontSize: '18px'
-# 					margin: "5px 0px 5px 5px"
-# 					textAlign: 'center'
-# 					borderRadius: '2px'
-# 					backgroundColor: scoreColors[s]
-# 				Dom.text s
-
-# 			Dom.div !-> # show votes
-# 				Dom.style
-# 					margin: "5px 8px"
-# 					Flex: true
-# 					Box: 'left'
-# 					overflow: 'hidden'
-# 				votes = Db.shared.get('rounds', roundId, 'votes', user.key())||[]
-# 				for k,v of votes
-# 					Dom.div !->
-# 						Dom.style
-# 							position: 'relative'
-# 						Ui.avatar Plugin.userAvatar(k),
-# 							size: 28
-# 							style:
-# 								margin: '0px 2px'
-# 						Dom.div !->
-# 							Dom.style
-# 								borderRadius: '50%'
-# 								position: 'absolute'
-# 								top: '0px'
-# 								left: '2px'
-# 								height: '30px'
-# 								width: '30px'
-# 								backgroundColor:  if v > 0 then "rgba(105, 240, 136, 0.3)" else "rgba(255, 102, 102, 0.3)"
-
-# 			Dom.div !-> # totals
-# 				r = Db.shared.peek('rounds', roundId, 'results', user.key())||0
-# 				s = Db.shared.peek('rounds', roundId, 'scores', user.key())||0
-# 				Dom.style
-# 					width: '30px'
-# 					height: '30px'
-# 					lineHeight: '30px'
-# 					fontSize: '18px'
-# 					margin: "5px 0px 5px 5px"
-# 					textAlign: 'center'
-# 					borderRadius: '2px'
-# 					backgroundColor: scoreColors[Math.min(6,(r+s))]
-# 				Dom.text (r+s)
-# 	, (user) -> -Db.shared.peek('rounds', roundId, 'scores', user.key())||0
-
-# Older render result:
-
-# legend
-# Dom.div !->
-# 	Dom.style
-# 		Box: 'left'
-# 		margin: '4px 8px'
-# 		textAlign: 'center'
-# 		fontWeight: 'lighter'
-# 		color: '#888'
-# 	Dom.div !->
-# 		Dom.style width: '40px'
-# 		Dom.text tr("user")
-# 	Dom.div !->
-# 		Dom.style width: '40px'
-# 		Dom.text tr("votes")
-# 	Dom.div !->
-# 		Dom.style Flex: true
-# 		Dom.text tr("answer")
-# 	Dom.div !->
-# 		Dom.style width: '35px'
-# 		Dom.text tr("score")
-
-# User results
-# Plugin.users.observeEach (user) !->
-# 	Dom.div !->
-# 		Dom.style
-# 			Box: 'left middle'
-# 			margin: '4px 8px'
-# 		Ui.avatar Plugin.userAvatar(user.key()),
-# 			style:
-# 				margin: '0 0 1px 0'
-
-# 		Dom.div !-> # votes
-# 			votes = getVotes user.key()
-# 			Dom.style
-# 				width: '30px'
-# 				height: '30px'
-# 				boxSizing: 'border-box'
-# 				lineHeight: '30px'
-# 				fontSize: '18px'
-# 				margin: "5px"
-# 				textAlign: 'center'
-# 			Dom.text "+#{votes}"
-# 		Dom.div !-> # given answer or vote
-# 			Dom.style
-# 				margin: "5px 1px"
-# 				Flex: true
-# 				Box: 'left'
-# 			a = Db.shared.get('rounds', roundId, 'answers', user.key())||[]
-# 			if !a.length
-# 				Dom.style
-# 					margin: "1px 5px"
-# 					padding: "2px 8px"
-# 					border: "1px solid #eee"
-# 					color: '#aaa'
-# 					borderRadius: '2px'
-# 					Box: 'left middle'
-# 					height: '24px'
-# 				Dom.text tr("has given no answer")
-# 			else
-# 				renderShortAnswer(i) for i in a
-
-# 		Dom.div !-> # score
-# 			s = Db.shared.peek('rounds', roundId, 'scores', user.key())||0
-# 			v = getVotes user.key()
-# 			c = 0
-# 			if (s-v) is 3 then c+=2
-# 			if v then ++c
-# 			Dom.style
-# 				width: '30px'
-# 				height: '30px'
-# 				lineHeight: '30px'
-# 				fontSize: '18px'
-# 				margin: "5px 0px 5px 5px"
-# 				textAlign: 'center'
-# 				borderRadius: '2px'
-# 				backgroundColor: scoreColors[c]
-# 			Dom.text s
-# , (user) -> -Db.shared.peek('rounds', roundId, 'scores', user.key())||0
