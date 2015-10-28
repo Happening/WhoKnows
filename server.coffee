@@ -56,17 +56,17 @@ exports.client_newRound = exports.newRound = newRound = !->
 		if +nr not in used and q[0] isnt null
 			available.push +nr
 
-	log "available", available.length
 	if available.length or true
 		maxRounds = Db.shared.incr 'maxRounds', 1
 		newQuestion = available[Math.floor(Math.random()*available.length)]
 		time = time = 0|(Date.now()*.001)
+		options = Util.makeRndOptions(newQuestion)
 		Db.shared.set 'rounds', maxRounds,
-			'qid': 1#newQuestion
+			'qid': newQuestion
 			'new': true
 			'time': time
-			'options': [1,2,3,4] # provide this in the 'correct' order. The client will rearrange them at random.
-		log "made new question:", newQuestion, "(available", available.length, ")"
+			'options': options # provide this in the 'correct' order. The client will rearrange them at random.
+		log "made new question:", newQuestion, "(available", available.length, ") answers:", options
 
 		setTimers()
 
@@ -116,9 +116,9 @@ exports.client_resolve = exports.resolve = resolve = (roundId) !->
 
 		# for each other user
 		for user2 in Plugin.userIds()
-			log "votes:", user2, question.get('votes', user2, user )
 			if question.get('votes', user2, user) is true
 				question.set 'votes', user2, user, (if score>4 then 1 else -1)
+				log "votes:", user2, question.get('votes', user2, user )
 
 		# safe scores
 		if score then question.set 'scores', user, score # score for this round. Not needed when it's zero
@@ -129,14 +129,13 @@ exports.client_resolve = exports.resolve = resolve = (roundId) !->
 	for user in Plugin.userIds()
 		result = 0
 		votes = question.get 'votes', user
-	for k,v of votes
-			log typeof(v)
-			if typeof(v) is 'number'
-				result+=v
-				log "incr", user, k, v
-		if result then question.set 'results', user, result
-		# safe to db
-		Db.shared.incr 'scores', user, result # global
+		for k,v of votes
+				if typeof(v) is 'number'
+					result+=v
+					log "incr", user, k, v
+			if result then question.set 'results', user, result
+			# safe to db
+			Db.shared.incr 'scores', user, result # global
 
 	question.set 'new', null # flag question as resolved
 

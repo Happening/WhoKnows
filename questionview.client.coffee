@@ -119,7 +119,7 @@ renderDraggableAnswer = (index, containerE) ->
 		# make item
 		thisItem = {}
 		remake = (idx, cE, o)->
-			log "doing remake", idx, "height:", element.height()
+			log "doing remake", idx, "height:", element.height(), questionOptions[idx]
 			thisItem =
 				height: element.height()
 				halfHeight: element.height()/2
@@ -287,6 +287,10 @@ exports.render = ->
 		switch state
 			when 'resolved'
 				SoftNav.nav 'resolved'
+				# already set an answer, if there is none
+				if !Db.shared.peek('rounds', roundId, 'answers', Plugin.userId())?
+					Server.sync 'answer', roundId, [1,2,3,4], !->
+						Db.shared.set('rounds', roundId, 'answers', Plugin.userId(), [1,2,3,4])
 			when 'answered'
 				SoftNav.nav 'answered'
 				whoknows()
@@ -416,8 +420,8 @@ resolved = !->
 					Dom.style
 						marginRight: '-6px'
 						fontSize: '130%'
-					r = Db.shared.peek('rounds', roundId, 'results', user.key())||0
-					s = Db.shared.peek('rounds', roundId, 'scores', user.key())||0
+					r = Db.shared.get('rounds', roundId, 'results', user.key())||0
+					s = Db.shared.get('rounds', roundId, 'scores', user.key())||0
 
 					Dom.text s
 					Dom.div !->
@@ -428,7 +432,7 @@ resolved = !->
 						Dom.text (if r>=0 then " + " else "  - ")
 					Dom.text Math.abs(r)
 		, (user) ->
-			-((Db.shared.peek('rounds', roundId, 'scores', user.key())||0)+(Db.shared.peek('rounds', roundId, 'results', user.key())||0))
+			-((Db.shared.get('rounds', roundId, 'scores', user.key())||0)+(Db.shared.get('rounds', roundId, 'results', user.key())||0))
 
 count = !-> # ♫ Final countdown! ♬
 	c = Db.local.peek('start') + questionTime # ten seconds
