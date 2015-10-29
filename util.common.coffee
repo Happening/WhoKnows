@@ -3,8 +3,8 @@ Plugin = require 'plugin'
 {tr} = require 'i18n'
 Rand = require 'rand'
 
-exports.debug = ->
-	true
+exports.debug = debug = ->
+	false
 
 # Determines duration of the round started at 'currentTime'
 # This comes from the Ranking Game plugin
@@ -17,15 +17,19 @@ exports.getRoundDuration = (currentTime) ->
 
 exports.getQuestion = (roundId) ->
 	id = Db.shared.peek 'rounds', roundId, 'qid'
-	return questions()[id]
+	return questions()[id].q
 
-# we show [1..3] applied on key
+exports.getOrderTitles = (roundId) ->
+	id = Db.shared.peek 'rounds', roundId, 'qid'
+	q = questions()[id]
+	return [q.t, q.b]
+
+# we show key applied to the possible answers
 exports.getOptions = (roundId) ->
-	q = questions()[Db.shared.peek 'rounds', roundId, 'qid']
+	a = questions()[Db.shared.peek 'rounds', roundId, 'qid'].a
 	k = getKey(roundId)
-	log "getOptions; k:", k, "q:", q
-	# return [q[k[0]+1], q[k[1]+1], q[k[2]+1], q[k[3]+1]]
-	return [q[k[0]+1], q[k[1]+1], q[k[2]+1], q[k[3]+1]]
+	if debug() then log "getOptions; k:", k, "q:", a
+	return [a[k[0]], a[k[1]], a[k[2]], a[k[3]]]
 
 # the solution is index of options in key
 exports.getSolution = (roundId) ->
@@ -33,24 +37,38 @@ exports.getSolution = (roundId) ->
 	o = Db.shared.peek 'rounds', roundId, 'options'
 	r = []
 	for i in [0..3]
-		r[i] = k.indexOf(o[i]-1)
-	log "getSolution", roundId, k, o, ": ", r
+		r[i] = k.indexOf(o[i])
+	if debug() then log "getSolution", roundId, k, o, ": ", r
 	return r
 
-# the key is a random order of [1..3]
+# the key is a random order of [0..3] in options
 exports.getKey = getKey = (roundId) ->
 	o = Db.shared.peek 'rounds', roundId, 'options'
 	s = rndOrder(roundId)
-	r = [o[s[0]]-1, o[s[1]]-1, o[s[2]]-1, o[s[3]]-1]
-	log "getKey", roundId, o, s, r
+	r = [o[s[0]], o[s[1]], o[s[2]], o[s[3]]]
+	if debug() then log "getKey", roundId, o, s, r
 	return r
 
 exports.makeRndOptions = (qId) -> # provide this in the 'correct' order. The client will rearrange them at random.
-	q = questions()[qId]
-	available = [1..q.length-1]
+	a = questions()[qId].a
+	available = [0..a.length-1]
 	r = []
 	for i in [1..4]
 		r.push +available.splice(Math.floor(Math.random()*available.length), 1)
+	r.sort() # always in acending order (for that is the correct order)
+	if debug() then log "makeRndOptions, available:", a.length-1, "options:", r
+	return r
+
+# make a random order of [0..3] based on a seed
+exports.rndOrder = rndOrder = (roundId) ->
+	seed = +Plugin.groupId() + +roundId
+	srng = new Rand.Rand(seed)
+	a = [0,1,2,3]
+	r = []
+	for x in [1..4]
+		r.push +(a.splice(srng.rand2(0,a.length),1))
+	if debug() then log "rndOrder:", Plugin.groupId(), roundId, seed, r
+	return r
 
 exports.getWinner = (roundId) ->
 	#walk through scores
@@ -63,35 +81,23 @@ exports.getWinner = (roundId) ->
 			winner = k
 	return winner
 
-exports.rndOrder = rndOrder = (roundId) ->
-	seed = +Plugin.groupId() + +roundId
-	srng = new Rand.Rand(seed)
-	a = [0,1,2,3]
-	r = []
-	for x in [1..4]
-		r.push +(a.splice(srng.rand2(0,a.length),1))
-	log "rndOrder:", Plugin.groupId(), roundId, seed, r
-	return r
-
-
 exports.questions = questions = -> [
-	# WARNING: indices are used, so don't remove items from this array (and add new questions at the end)
-	# [0]: question, [1-x]: the answers in the correct order
-	["Order Films by release date", "Citizen Kane", "James Bond: Dr. No", "The Good, the Bad and the Ugly", "The Godfather", "Jaws", "Star Wars: A New Hope", "ET", "Jurassic Park", "Schindler\'s List"] # 1984, 1963, 1968, 1972, 1975, 1977, 1982, 1993, 1994
-	["Order buildings by ascending height", "Burj Khalifa", "Petronas Twin Towers", "Empire State Building", "Eiffel Tower", "Great Pyramid of Giza", "Big Ben", "Statue of Liberty", "Sydney Opera House", "Leaning Tower of Pisa" ] #828, 452, 381, 300, 139, 96, 93, 65, 56
-	["Order wonders by construction date", "Great Pyramid of Giza", "Great Wall of China", "Petra", "Colosseum", "Chichen Itza", "Machu Picchu", "Taj Mahal", "Christ the Redeemer"]
-	["Order TV series on broadcast date", "Star Trek: The Original Series", "The Bold and the Beautiful", "The Simpsons", "Futurama", "The X-Files", "South Park", "The Big Bang Theory", "Scrubs", "A Game of Thrones"] # 1966, 1987, 1989, 1998, 2000, 2004, 2007, 2010, 2011
-	["Order movies by IMDb rating", "The Shawshank Redemption", "The Godfather", "The Dark Knight", "Pulp Fiction", "The Lord of the Rings: The Fellowship of the Ring", "Citizen Kane", "Toy Story", "Life of Brian", "Kill Bill"]
-	["Order Disney films on release date", "Snow White and the Seven Dwarfs", "Bambi", "Alice in Wonderland", "One Hundred and One Dalmatians", "The Aristocats", "The Little Mermaid", "Aladdin", "The Lion King", "The Princess and the Frog"]
-	["Order Pixar films on release date", "Toy Story", "A Bug's Life", "Monsters, Inc.", "Finding Nemo", "The Incredibles", "WALL-E", "Up", "Brave"]
-	["Order Presidents of the United States Chronologically", "George Washington", "Abraham Lincoln", "Franklin D. Roosevelt", "John F. Kennedy", "Richard Nixon", "Bill Clinton", "George W Bush (jr.)", "Barack Obama"]
-	["Order countries by population", "China", "India", "United States", "Brazil", "Japan", "Germany", "Iran", "Canada", "Iceland"]
-	["Order weight per liter", "Petrol", "Alcohol", "Olive oil", "Diesel", "Sunflower oil", "Water", "Beer", "Milk", "Sea water", "Citric acid"]
-	["Order creation chronologically according to the Bible", "Earth", "Water", "Land", "Sun", "Birds", "Man"]
-	["Order these balls by size", "Table tennis ball", "Golf ball", "Pool ball", "Tennis ball", "Baseball ball", "Soccer ball", "Basketball ball"]
-	["Order by invention date", "Stone tools", "The wheel", "The alphabet", "Coins", "Windmill", "Woodblock printing", "Toilet Paper", "Gunpowder", "Soap", "Telescope", "Steam Engine", "Light Bulb"]
-
-	# WARNING: always add new questions to the end of this array
+    # WARNING: indices are used, so don't remove items from this array (and add new questions at the end)
+    # [0]: question, [1-x]: the answers in the correct order
+    {q:"Order Films by release date", t:"Oldest", b:"Latest", a:["Citizen Kane", "James Bond: Dr. No", "The Good, the Bad and the Ugly", "The Godfather", "Jaws", "Star Wars: A New Hope", "ET", "Jurassic Park", "Schindler\'s List"]} # 1984, 1963, 1968, 1972, 1975, 1977, 1982, 1993, 1994
+    {q:"Order buildings by height", t:"Highest", b:"Lowest", a:["Burj Khalifa", "Petronas Twin Towers", "Empire State Building", "Eiffel Tower", "Great Pyramid of Giza", "Big Ben", "Statue of Liberty", "Sydney Opera House", "Leaning Tower of Pisa"]} #828, 452, 381, 300, 139, 96, 93, 65, 56
+    {q:"Order wonders by construction date", t:"Oldest", b:"Newest", a:["Great Pyramid of Giza", "Great Wall of China", "Petra", "Colosseum", "Chichen Itza", "Machu Picchu", "Taj Mahal", "Christ the Redeemer"]}
+    {q:"Order TV series on broadcast date", t:"Oldest", b:"Newest", a:["Star Trek: The Original Series", "The Bold and the Beautiful", "The Simpsons", "Futurama", "The X-Files", "South Park", "The Big Bang Theory", "Scrubs", "A Game of Thrones"]} # 1966, 1987, 1989, 1998, 2000, 2004, 2007, 2010, 2011
+    {q:"Order movies by IMDb rating", t:"Highest rated", b:"Lowest rated", a:["The Shawshank Redemption", "The Godfather", "The Dark Knight", "Pulp Fiction", "The Lord of the Rings: The Fellowship of the Ring", "Citizen Kane", "Toy Story", "Life of Brian", "Kill Bill"]}
+    {q:"Order Disney films on release date", t: "Oldest", b:"Latest", a:["Snow White and the Seven Dwarfs", "Bambi", "Alice in Wonderland", "One Hundred and One Dalmatians", "The Aristocats", "The Little Mermaid", "Aladdin", "The Lion King", "The Princess and the Frog"]}
+    {q:"Order Pixar films on release date", t:"Oldest", b:"Latest", a:["Toy Story", "A Bug's Life", "Monsters, Inc.", "Finding Nemo", "The Incredibles", "WALL-E", "Up", "Brave"]}
+    {q:"Order Presidents of the United States Chronologically", t:"First", b:"Last", a:["George Washington", "Abraham Lincoln", "Franklin D. Roosevelt", "John F. Kennedy", "Richard Nixon", "Bill Clinton", "George W Bush (jr.)", "Barack Obama"]}
+    {q:"Order countries by population", t:"Highest population", b:"Lowest population", a:["China", "India", "United States", "Brazil", "Japan", "Germany", "Iran", "Canada", "Iceland"]}
+    {q:"Order weight per liter", t:"Lightest", b:"Heaviest", a:["Petrol", "Alcohol", "Olive oil", "Diesel", "Sunflower oil", "Water", "Beer", "Milk", "Sea water", "Citric acid"]}
+    {q:"Order creation chronologically according to the Bible", t:"First", b:"Last", a:["Earth", "Water", "Land", "Sun", "Birds", "Man"]}
+    {q:"Order these balls by size", t:"Smallest", b:"Biggest", a:["Table tennis ball", "Golf ball", "Pool ball", "Tennis ball", "Baseball ball", "Soccer ball", "Basketball ball"]}
+    {q:"Order by invention date", t:"First", b:"Last", a:["Stone tools", "The wheel", "The alphabet", "Coins", "Windmill", "Woodblock printing", "Toilet Paper", "Gunpowder", "Soap", "Telescope", "Steam Engine", "Light Bulb"]}
+    # WARNING: always add new questions to the end of this array
 ]
 # questions that are deemed to difficult:
 # ["Order Star Wars movies by release date", "A New Hope", "The Empire Strikes Back", "Return of the Jedi", "The Phantom Menace", "Attack of the Clones", "Revenge of the Sith", "The Force Awakens"]

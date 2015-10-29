@@ -17,7 +17,6 @@ enterDelay = 5
 questionID = 0
 roundId = 0
 order = []
-question = []
 questionOptions = []
 solution = []
 items = []
@@ -119,7 +118,6 @@ renderDraggableAnswer = (index, containerE) ->
 		# make item
 		thisItem = {}
 		remake = (idx, cE, o)->
-			log "doing remake", idx, "height:", element.height(), questionOptions[idx]
 			thisItem =
 				height: element.height()
 				halfHeight: element.height()/2
@@ -132,7 +130,6 @@ renderDraggableAnswer = (index, containerE) ->
 				remake: remake
 				setOffset: setOffset
 				getOffset: getOffset
-		log "main remake"
 		thisItem = remake(index, containerE, items.length)
 		items.push thisItem
 
@@ -242,7 +239,6 @@ exports.render = ->
 	return whoknows() if Page.state.get(1) is "whoknows"
 
 	Page.setTitle tr("Question")
-	question = Util.getQuestion(roundId) # question array
 	questionOptions = Util.getOptions(roundId) # options array, happening unique seed
 	solution = Util.getSolution(roundId) # options array, user unique seed
 
@@ -287,15 +283,16 @@ exports.render = ->
 		switch state
 			when 'resolved'
 				SoftNav.nav 'resolved'
-				# already set an answer, if there is none
-				if !Db.shared.peek('rounds', roundId, 'answers', Plugin.userId())?
-					Server.sync 'answer', roundId, [1,2,3,4], !->
-						Db.shared.set('rounds', roundId, 'answers', Plugin.userId(), [1,2,3,4])
 			when 'answered'
 				SoftNav.nav 'answered'
 				whoknows()
 			when 'answering'
 				Obs.observe count
+				# already set an answer, if there is none
+				if !Db.shared.peek('rounds', roundId, 'answers', Plugin.userId())?
+					log "Sending default answer"
+					Server.sync 'answer', roundId, [0,1,2,3], !->
+						Db.shared.set('rounds', roundId, 'answers', Plugin.userId(), [0,1,2,3])
 				Form.setPageSubmit (values) !->
 					log "done"
 					endTimer()
@@ -345,12 +342,26 @@ answering = !->
 			margin: '0px -8px'
 		Dom.h4 !->
 			Dom.text tr("Answers:")
-		# renderAnswers()
+		orderTitles = Util.getOrderTitles(roundId)
+		Dom.div !->
+			Dom.style
+				textAlign: 'center'
+				fontSize: '80%'
+				color: '#aaa'
+				margin: '0px'
+			Dom.text orderTitles[0]
 		Dom.div !->
 			log "--rendering items--"
 			items = []
 			order = Db.shared.get('rounds', roundId, 'answers', Plugin.userId())||[0,1,2,3]
 			renderDraggableAnswer(i, Dom.get()) for i in order
+		Dom.div !->
+			Dom.style
+				textAlign: 'center'
+				fontSize: '80%'
+				color: '#aaa'
+				margin: '8px 0px 0px'
+			Dom.text orderTitles[1]
 
 	Dom.css
 		".dragging":
@@ -448,7 +459,7 @@ renderQuestion = !->
 	Dom.div !-> # question
 		Dom.style
 			textAlign: 'center'
-		Dom.h4 question[0]
+		Dom.h4 Util.getQuestion(roundId)
 
 renderTimer = (timeOut, size)!->
 	Dom.div !-> # timer
@@ -512,7 +523,7 @@ whoknows = !->
 
 		size = (Page.width()-40) / Math.floor((Page.width()-0)/100)-1
 		Plugin.users.observeEach (user) !->
-			# return if +user.key() is Plugin.userId() # skip yourself
+			return if +user.key() is Plugin.userId() # skip yourself
 			Dom.div !->
 				v = votesO.get()
 				selected = v[user.key()]

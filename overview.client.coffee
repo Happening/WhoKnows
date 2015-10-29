@@ -17,7 +17,7 @@ renderQuestion = (qid) !->
 		answered = question.get('answers', Plugin.userId())||0
 		unResolved = !!question.get('new')
 		unread = Event.isNew(question.get('time'), question.key())
-		questionText = Util.getQuestion(qid)[0]
+		questionText = Util.getQuestion(qid)
 		Dom.style
 			Box: 'left'
 			margin: '0px 0px'

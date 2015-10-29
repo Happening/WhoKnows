@@ -141,7 +141,7 @@ exports.client_resolve = exports.resolve = resolve = (roundId) !->
 
 	Event.create
 		unit: 'round'
-		text: tr("%1\nResults are in!", Util.getQuestion(question.key())[0])
+		text: tr("%1\nResults are in!", Util.getQuestion(question.key()))
 
 exports.reminder = !->
 	roundId = Db.shared.get('maxRounds')
