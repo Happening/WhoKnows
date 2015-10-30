@@ -15,7 +15,7 @@ exports.onInstall = !->
 # 		newRound()
 
 exports.client_answer = (id, a) !->
-	log "", Plugin.userId(), "answered:", a
+	log Plugin.userId(), "answered:", a
 	Db.shared.merge 'rounds', id, 'answers', Plugin.userId(), a
 
 	# Count number of people who answered. If it is everyone, we can resolve the question. (Handy for local party mode)
@@ -93,17 +93,12 @@ exports.client_resolve = exports.resolve = resolve = (roundId) !->
 		log "Question already resolved"
 		# return
 	answers = question.get('answers')||[]
-
-	getVotes = (uId) !->
-		votes = 0
-		for k,v of answers
-			if +v is +uId then ++votes
-		return votes
+	solution = Util.getSolution(roundId)
 
 	for user in Plugin.userIds()
-		input = (answers[user]||[]).slice(0)
+		input = (answers[user]||[]).slice(0) # clone array
 		continue unless input.length
-		target = Util.getSolution(roundId)
+		target = solution.slice(0) # clone array
 		# calc score using the V⁴ Method (van Viegen, van Vliet)
 		# there are a maximum of 'steps' needed to bring any answer to the correct order. So the point range from 0 to 6
 		errors = 0
@@ -112,7 +107,7 @@ exports.client_resolve = exports.resolve = resolve = (roundId) !->
 			input.splice(0,1)
 			target.splice(index,1)
 		score = 6-errors
-		log "user #{user} answer:", answers[user], "solution:", Util.getSolution(roundId), "errors:", errors, "score:", score
+		log "user #{user} answer:", answers[user], "solution:", solution, "errors:", errors, "score:", score
 
 		# for each other user
 		for user2 in Plugin.userIds()
@@ -132,7 +127,6 @@ exports.client_resolve = exports.resolve = resolve = (roundId) !->
 		for k,v of votes
 				if typeof(v) is 'number'
 					result+=v
-					log "incr", user, k, v
 			if result then question.set 'results', user, result
 			# safe to db
 			Db.shared.incr 'scores', user, result # global
