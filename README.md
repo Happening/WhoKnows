@@ -1,7 +1,7 @@
 Who Knows
 =======
 
-Respond to questions with either the answer, or select someone who you think has given the correct answer.
+Answer questions by dragging the answers in the correct order. Afterward, you can earn extra points for guessing if others got it right.
 
 What's Happening?
 -----------------
