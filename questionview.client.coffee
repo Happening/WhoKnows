@@ -519,7 +519,7 @@ whoknows = !->
 
 		Dom.div !->
 			Dom.style textAlign: 'center'
-			Dom.h4 tr("Select any number of people. You earn a point if they gave a correct answer. But you lose a point if they answered wrong.")
+			Dom.h4 tr("Select any number of people. You earn a point for each who gave a correct answer. But you lose a point for each who answered wrong.")
 
 		size = (Page.width()-40) / Math.floor((Page.width()-0)/100)-1
 		Plugin.users.observeEach (user) !->
