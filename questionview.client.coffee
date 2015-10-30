@@ -12,7 +12,7 @@ Util = require 'util'
 SoftNav = require 'softNav'
 Icon = require 'icon'
 
-questionTime = (if Util.debug() then 600 else 20) # you have 20 seconds to answer the question
+questionTime = (if Util.debug() then 20 else 20) # you have 20 seconds to answer the question
 enterDelay = 5
 questionID = 0
 roundId = 0
@@ -163,7 +163,6 @@ renderDraggableAnswer = (index, containerE) ->
 					for oldItem, o in items
 						newItems.push oldItem.remake(oldItem.value, containerE, o)
 					items = newItems
-					log items
 
 			# Touch move
 			element.style _transform: "translateY(#{draggedY}px)"
@@ -236,7 +235,6 @@ endTimer = !->
 
 exports.render = ->
 	roundId = Page.state.get(0)
-	return whoknows() if Page.state.get(1) is "whoknows"
 
 	Page.setTitle tr("Question")
 	questionOptions = Util.getOptions(roundId) # options array, happening unique seed
@@ -300,12 +298,13 @@ exports.render = ->
 				SoftNav.nav 'answering'
 			when 'entering'
 				cooldownO.set enterDelay
-				Obs.onTime enterDelay*1000, !->
+				Obs.onTime enterDelay*1000+100, !->
 					Db.local.set 'start', (Date.now()*.001)
 				tick = !->
+					log "tick"
 					timer = Obs.onTime 1000, !->
-						tick()
 						cooldownO.incr -1
+						if cooldownO.peek() > 0 then tick()
 				tick()
 				SoftNav.nav 'entering'
 			# when 'voting'
@@ -375,7 +374,6 @@ answering = !->
 			for t,i in items
 				t.order = i
 			order = [items[0].order, items[1].order, items[2].order, items[3].order]
-			log order
 			Server.sync 'answer', roundId, order, !->
 				Db.shared.set('rounds', roundId, 'answers', Plugin.userId(), order)
 
@@ -446,7 +444,8 @@ resolved = !->
 			-((Db.shared.get('rounds', roundId, 'scores', user.key())||0)+(Db.shared.get('rounds', roundId, 'results', user.key())||0))
 
 count = !-> # ♫ Final countdown! ♬
-	c = Db.local.peek('start') + questionTime # ten seconds
+	log "count"
+	c = Db.local.peek('start') + questionTime # twenty seconds
 	c = Math.floor(c - (0|(Date.now()*.001)))
 	cooldownO.set c
 	if c > 0
@@ -468,7 +467,7 @@ renderTimer = (timeOut, size)!->
 				position: 'relative'
 				height: '30px'
 				width: size||"#{Page.width()}px"
-				backgroundColor: "hsl(#{130/timeOut*+(cooldownO.get()||timeOut)},100%, #{95 - Math.pow(timeOut-(cooldownO.get()||timeOut),0.7)}%)"
+				backgroundColor: "hsl(#{130/timeOut*+(cooldownO.get()||0)},100%, #{95 - Math.pow(timeOut-(cooldownO.get()||0),0.7)}%)"
 				margin: "0px -8px"
 				textAlign: 'center'
 				color: 'black'
@@ -484,14 +483,14 @@ renderTimer = (timeOut, size)!->
 					left: '0px'
 					width: size||"#{Page.width()}px"
 					height: '30px'
-					backgroundColor: "hsl(#{130/timeOut*+(cooldownO.get()||timeOut)},100%, #{87 - Math.pow(timeOut-(cooldownO.get()||timeOut),0.3)}%)"
-					_transform: "scaleX(#{(cooldownO.get()||timeOut)/timeOut})"
+					backgroundColor: "hsl(#{130/timeOut*+(cooldownO.get()||0)},100%, #{87 - Math.pow(timeOut-(cooldownO.get()||0),0.3)}%)"
+					_transform: "scaleX(#{(cooldownO.get()||0)/timeOut})"
 					_transition: "transform 2s, background-color 1s linear"
 					WebkitTransition_: "transform 1s linear, background-color 1s linear"
 		Dom.div !->
 			Dom.style
 				_transform: 'translate3D(0,0,0)'
-			Dom.text cooldownO.get()||timeOut
+			Dom.text cooldownO.get()||0
 
 renderAnswers = (hideAnswers = false, solution = false, showOwn = false) !->
 	renderAnswer(i, solution, hideAnswers, showOwn) for i in [0..3]
@@ -527,7 +526,6 @@ whoknows = !->
 			Dom.div !->
 				v = votesO.get()
 				selected = v[user.key()]
-				log selected
 				Dom.style
 					display: 'inline-block'
 					position: 'relative'
@@ -570,5 +568,4 @@ whoknows = !->
 						hiddenForm.value null
 					else
 						hiddenForm.value true
-
-		, (user) -> user.get('name')
+		, (user) -> -Db.shared.peek('scores', user.key())|| 0

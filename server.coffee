@@ -52,21 +52,23 @@ exports.client_newRound = exports.newRound = newRound = !->
 		used.push +qid
 
 	available = []
-	for q, nr in questions
-		if +nr not in used and q[0] isnt null
+	for q, nr in Util.questions()
+		if +nr not in used and q.q isnt null
 			available.push +nr
 
-	if available.length or true
+	if available.length
 		maxRounds = Db.shared.incr 'maxRounds', 1
 		newQuestion = available[Math.floor(Math.random()*available.length)]
 		time = time = 0|(Date.now()*.001)
 		options = Util.makeRndOptions(newQuestion)
+		key = Util.generateKey(options)
 		Db.shared.set 'rounds', maxRounds,
 			'qid': newQuestion
 			'new': true
 			'time': time
 			'options': options # provide this in the 'correct' order. The client will rearrange them at random.
-		log "made new question:", newQuestion, "(available", available.length, ") answers:", options
+			'key': key
+		log "made new question:", newQuestion, "(available", available.length, ") answers:", options, "key:", key
 
 		setTimers()
 

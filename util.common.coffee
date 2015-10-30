@@ -4,7 +4,7 @@ Plugin = require 'plugin'
 Rand = require 'rand'
 
 exports.debug = debug = ->
-	false
+	true
 
 # Determines duration of the round started at 'currentTime'
 # This comes from the Ranking Game plugin
@@ -27,13 +27,13 @@ exports.getOrderTitles = (roundId) ->
 # we show key applied to the possible answers
 exports.getOptions = (roundId) ->
 	a = questions()[Db.shared.peek 'rounds', roundId, 'qid'].a
-	k = getKey(roundId)
+	k = Db.shared.peek 'rounds', roundId, 'key'
 	if debug() then log "getOptions; k:", k, "q:", a
 	return [a[k[0]], a[k[1]], a[k[2]], a[k[3]]]
 
 # the solution is index of options in key
 exports.getSolution = (roundId) ->
-	k = getKey(roundId)
+	k = Db.shared.peek 'rounds', roundId, 'key'
 	o = Db.shared.peek 'rounds', roundId, 'options'
 	r = []
 	for i in [0..3]
@@ -42,11 +42,14 @@ exports.getSolution = (roundId) ->
 	return r
 
 # the key is a random order of [0..3] in options
-exports.getKey = getKey = (roundId) ->
-	o = Db.shared.peek 'rounds', roundId, 'options'
-	s = rndOrder(roundId)
+exports.generateKey = (o) -> # o for options
+	a = [0,1,2,3]
+	s = []
+	for x in [1..4]
+		rnd = Math.floor(Math.random()*a.length)
+		s.push +(a.splice(rnd,1))
 	r = [o[s[0]], o[s[1]], o[s[2]], o[s[3]]]
-	if debug() then log "getKey", roundId, o, s, r
+	if debug() then log "generateKey:", o, s, r
 	return r
 
 exports.makeRndOptions = (qId) -> # provide this in the 'correct' order. The client will rearrange them at random.
@@ -57,17 +60,6 @@ exports.makeRndOptions = (qId) -> # provide this in the 'correct' order. The cli
 		r.push +available.splice(Math.floor(Math.random()*available.length), 1)
 	r.sort() # always in acending order (for that is the correct order)
 	if debug() then log "makeRndOptions, available:", a.length-1, "options:", r
-	return r
-
-# make a random order of [0..3] based on a seed
-exports.rndOrder = rndOrder = (roundId) ->
-	seed = +Plugin.groupId() + +roundId
-	srng = new Rand.Rand(seed)
-	a = [0,1,2,3]
-	r = []
-	for x in [1..4]
-		r.push +(a.splice(srng.rand2(0,a.length),1))
-	if debug() then log "rndOrder:", Plugin.groupId(), roundId, seed, r
 	return r
 
 exports.getWinner = (roundId) ->
