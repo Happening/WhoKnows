@@ -94,7 +94,7 @@ exports.render = ->
 					display: 'inline-block'
 					Box: 'vertical'
 					margin: '5px 10px'
-					width: ((Page.width()-16)/3)-20 + "px"
+					width: ((Page.width()-16)/3)-30 + "px"
 				Ui.avatar Plugin.userAvatar(user),
 					size: 60
 					style:
