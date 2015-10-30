@@ -1,4 +1,3 @@
 name: Who Knows
-icon: question2
 description: Answer questions by dragging the answers in the correct order. Afterward, you can earn extra points for guessing if others got it right.
 api: 2
