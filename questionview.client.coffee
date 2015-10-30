@@ -12,7 +12,7 @@ Util = require 'util'
 SoftNav = require 'softNav'
 Icon = require 'icon'
 
-questionTime = (if Util.debug() then 20 else 20) # you have 20 seconds to answer the question
+questionTime = (if Util.debug() then 600 else 20) # you have 20 seconds to answer the question
 enterDelay = 5
 questionID = 0
 roundId = 0
@@ -223,6 +223,19 @@ renderDraggableAnswer = (index, containerE) ->
 							item.order = temp
 				else
 					item.e.style border: ''
+
+renderShortAnswer = (i) !->
+    Dom.div !->
+        Dom.style
+            _boxSizing: 'border-box'
+            Flex: true
+            Box: 'middle center'
+            height: '30px'
+            margin: '0px 4px 0px 0px'
+            fontWeight: 'bold'
+            backgroundColor: "hsl(#{360/5*i},100%,87%)"
+            borderRadius: '2px'
+        Dom.text ["A", "B", "C", "D"][i]
 
 startTimer = !->
 	Db.local.set 'start', Math.floor(0|(Date.now()*.001))
@@ -440,6 +453,51 @@ resolved = !->
 							width: '20px'
 						Dom.text (if r>=0 then " + " else "  - ")
 					Dom.text Math.abs(r)
+				Dom.onTap !->
+					Modal.show !->
+						Dom.div !->
+							Dom.style
+								margin: '-8px'
+								padding: '8px'
+								Box: 'left middle'
+							Ui.avatar Plugin.userAvatar(user.key()), size: 60
+							answer = Db.shared.get('rounds', roundId, 'answers', user.key())||[]
+							votes = Util.getVotes(roundId, user.key())
+							Dom.div !->
+								Dom.style
+									Flex: true
+									marginLeft: '8px'
+								if answer.length
+									Dom.text tr("%1 answered:", Plugin.userName(user.key()))
+									Dom.div !->
+										Dom.style
+											Box: 'left'
+											marginTop: '4px'
+										renderShortAnswer(i) for i in answer
+								else
+									Dom.text tr("%1 didn't gave an answer", Plugin.userName(user.key()))
+								Dom.div !->
+									Dom.style marginTop: '8px'
+									if votes.length
+										Dom.text tr("%1 voted on:", Plugin.userName(user.key()))
+										for i in votes
+											Dom.div !->
+												Dom.style
+													Box: 'left middle'
+													marginTop: '4px'
+												Ui.avatar(Plugin.userAvatar(i[0]), size: 26)
+												Dom.div !->
+													Dom.style
+														Flex: true
+														textOverflow: 'ellipsis'
+														overflow: 'hidden'
+														marginRight: '6px'
+													Dom.text Plugin.userName(i[0])
+												Dom.div !->
+													Dom.text i[1]
+									else
+										Dom.text tr("%1 didn't vote on anyone", Plugin.userName(user.key()))
+
 		, (user) ->
 			-((Db.shared.get('rounds', roundId, 'scores', user.key())||0)+(Db.shared.get('rounds', roundId, 'results', user.key())||0))
 

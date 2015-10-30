@@ -122,6 +122,10 @@ exports.client_resolve = exports.resolve = resolve = (roundId) !->
 
 		Db.shared.incr 'scores', user, score # global
 
+	# for highest score
+	winners = []
+	highestScore = -1
+
 	# add to score, the result of their who knows comp.
 	for user in Plugin.userIds()
 		result = 0
@@ -132,6 +136,18 @@ exports.client_resolve = exports.resolve = resolve = (roundId) !->
 			if result then question.set 'results', user, result
 			# safe to db
 			Db.shared.incr 'scores', user, result # global
+
+		#calc user with highest score
+		s = (question.get('scores', user)||0) + result
+		if s > highestScore
+			highestScore = s
+			winners = [user]
+		else if s is highestScore
+			winners.push user
+
+	winners.sort (a, b) ->
+		(question.get('scores', b)||0) - (question.get('scores', a)||0)
+	question.set 'winner', winners[0]
 
 	question.set 'new', null # flag question as resolved
 

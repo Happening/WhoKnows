@@ -4,7 +4,7 @@ Plugin = require 'plugin'
 Rand = require 'rand'
 
 exports.debug = debug = ->
-	true
+	false
 
 # Determines duration of the round started at 'currentTime'
 # This comes from the Ranking Game plugin
@@ -63,15 +63,19 @@ exports.makeRndOptions = (qId) -> # provide this in the 'correct' order. The cli
 	return r
 
 exports.getWinner = (roundId) ->
-	#walk through scores
-	answers = Db.shared.get 'rounds', roundId, 'scores'
-	winner = -1
-	winningScore = -1
-	for k,v of answers
-		if v>winningScore
-			winningScore = v
-			winner = k
-	return winner
+	Db.shared.peek 'rounds', roundId, 'winner'
+
+exports.getVotes = (roundId, userId) ->
+	votes = Db.shared.get('rounds', roundId, 'votes', userId)||[]
+	r = []
+	for k,v of votes
+		if v is true
+			r.push [k,0]
+		else if v > 0
+			r.push [k,"+1"]
+		else
+			r.push [k,"-1"]
+	return r
 
 exports.questions = questions = -> [
     # WARNING: indices are used, so don't remove items from this array (and add new questions at the end)
@@ -79,7 +83,7 @@ exports.questions = questions = -> [
     {q:"Order Films by release date", t:"Oldest", b:"Latest", a:["Citizen Kane", "James Bond: Dr. No", "The Good, the Bad and the Ugly", "The Godfather", "Jaws", "Star Wars: A New Hope", "ET", "Jurassic Park", "Schindler\'s List"]} # 1984, 1963, 1968, 1972, 1975, 1977, 1982, 1993, 1994
     {q:"Order buildings by height", t:"Highest", b:"Lowest", a:["Burj Khalifa", "Petronas Twin Towers", "Empire State Building", "Eiffel Tower", "Great Pyramid of Giza", "Big Ben", "Statue of Liberty", "Sydney Opera House", "Leaning Tower of Pisa"]} #828, 452, 381, 300, 139, 96, 93, 65, 56
     {q:"Order wonders by construction date", t:"Oldest", b:"Newest", a:["Great Pyramid of Giza", "Great Wall of China", "Petra", "Colosseum", "Chichen Itza", "Machu Picchu", "Taj Mahal", "Christ the Redeemer"]}
-    {q:"Order TV series on broadcast date", t:"Oldest", b:"Newest", a:["Star Trek: The Original Series", "The Bold and the Beautiful", "The Simpsons", "Futurama", "The X-Files", "South Park", "The Big Bang Theory", "Scrubs", "A Game of Thrones"]} # 1966, 1987, 1989, 1998, 2000, 2004, 2007, 2010, 2011
+    {q:"Order TV series on broadcast date", t:"Oldest", b:"Newest", a:["Star Trek: The Original Series", "The Bold and the Beautiful", "The Simpsons", "The X-Files", "South Park", "The Big Bang Theory", "Scrubs", "Futurama", "A Game of Thrones"]} # 1966, 1987, 1989, 1998, 2000, 2004, 2007, 2010, 2011
     {q:"Order movies by IMDb rating", t:"Highest rated", b:"Lowest rated", a:["The Shawshank Redemption", "The Godfather", "The Dark Knight", "Pulp Fiction", "The Lord of the Rings: The Fellowship of the Ring", "Citizen Kane", "Toy Story", "Life of Brian", "Kill Bill"]}
     {q:"Order Disney films on release date", t: "Oldest", b:"Latest", a:["Snow White and the Seven Dwarfs", "Bambi", "Alice in Wonderland", "One Hundred and One Dalmatians", "The Aristocats", "The Little Mermaid", "Aladdin", "The Lion King", "The Princess and the Frog"]}
     {q:"Order Pixar films on release date", t:"Oldest", b:"Latest", a:["Toy Story", "A Bug's Life", "Monsters, Inc.", "Finding Nemo", "The Incredibles", "WALL-E", "Up", "Brave"]}
